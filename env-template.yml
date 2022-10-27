@@ -1,0 +1,19 @@
+############################################################
+# Sample Environment variable template
+# Defines the form displayed to users in the device or group settings to provide parameters to the app
+############################################################
+
+# NOTE: Template entries without a label property will not be displayed
+# NOTE: the "label" and "type" must be present on each variable
+
+WG_HOST:
+    label: Public IP Address or Hostname
+    type: text
+    defaultValue: 92.50.64.50
+
+PASSWORD:
+    label: Admin Password
+    type: text
+    defaultValue: admin
+    secret: true
+    description: The password of the admin user

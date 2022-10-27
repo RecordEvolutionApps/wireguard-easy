@@ -1,0 +1,2 @@
+FROM weejewel/wg-easy
+
