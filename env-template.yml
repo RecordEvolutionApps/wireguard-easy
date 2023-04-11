@@ -17,3 +17,58 @@ PASSWORD:
     defaultValue: admin
     secret: true
     description: The password of the admin user
+
+WG_MTU:
+    label: MTU
+    defaultValue: 1420
+    type: numeric
+    min: 0
+    step: 1
+    description: The MTU the clients will use.
+
+WG_PERSISTENT_KEEPALIVE:
+    label: Persistent Keep Alive
+    type: numeric
+    defaultValue: 0
+    min: 0
+    step: 1
+    unit: 'seconds'
+
+WG_DEFAULT_ADDRESS:
+    label: Clients IP Address Range
+    type: text
+    defaultValue: 10.8.0.x
+
+WG_DEFAULT_DNS:
+    label: DNS Server clients will use
+    type: text
+    defaultValue: 1.1.1.1
+
+WG_ALLOWED_IPS:
+    label: Allowed IPs clients will use
+    type: text
+    defaultValue: 0.0.0.0/0, ::/0
+
+WG_PRE_UP:
+    label: Wireguard pre up command
+    type: textarea
+    defaultValue: # iptables -t nat -A POSTROUTING -j MASQUERADE -o eth0
+
+WG_POST_UP:
+    label: Wireguard post up command
+    type: textarea
+    defaultValue: |
+        iptables -t nat -A POSTROUTING -s ${module.exports.WG_DEFAULT_ADDRESS.replace('x', '0')}/24 -o eth0 -j MASQUERADE;
+        iptables -A INPUT -p udp -m udp --dport 51820 -j ACCEPT;
+        iptables -A FORWARD -i wg0 -j ACCEPT;
+        iptables -A FORWARD -o wg0 -j ACCEPT;
+
+WG_PRE_DOWN:
+    label: Wireguard pre down command
+    type: textarea
+    defaultValue: # iptables -t nat -D POSTROUTING -j MASQUERADE -o eth0
+
+WG_POST_DOWN:
+    label: Wireguard post down command
+    type: textarea
+    defaultValue: 
