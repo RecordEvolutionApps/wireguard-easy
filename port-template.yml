@@ -10,9 +10,10 @@
 # Note: Using a tcp protocol you can also stream RTSP Video directly
 
 ports:
-  - name: Web interface       # Label of the port in the device's app settings
-    port: 51821               # Port under which a web server provides a user interface
-    main: true                # This is the port used for the quick-access icon on a device's app list
-  - name: VPN
+  - name: Web interface
     port: 51821
-    protocol: tcp             # Possible values: "https" | "tcp" (default: "https")
+    main: true
+# This port is required for tunneling the VPN. This is currently not supported
+  # - name: VPN 
+  #   port: 51820
+  #   protocol: udp             # Possible values: "https" | "tcp" (default: "https")
