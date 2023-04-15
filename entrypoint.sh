@@ -1,0 +1,1 @@
+WG_HOST="$DEVICE_KEY-wireguardeasy-51821.app.record-evolution.com" node server.js

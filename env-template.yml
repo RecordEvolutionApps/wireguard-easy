@@ -6,10 +6,10 @@
 # NOTE: Template entries without a label property will not be displayed
 # NOTE: the "label" and "type" must be present on each variable
 
-WG_HOST:
-    label: Public IP Address or Hostname
-    type: text
-    defaultValue: 92.50.64.50
+# WG_HOST:
+#     label: Public IP Address or Hostname
+#     type: text
+#     defaultValue: https://xxxx-wireguardeasy-51821.app.record-evolution.com/
 
 PASSWORD:
     label: Admin Password
