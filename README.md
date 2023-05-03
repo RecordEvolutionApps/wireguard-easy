@@ -1,4 +1,5 @@
-# WireGuard Easy
+# The WireGuard Easy App
+WireGuard is a modern and speedy VPN that uses advanced cryptography. It's designed to be faster than OpenVPN and can be used on embedded interfaces. The WireGuard App is a versatile VPN suitable for a variety of situations such as secure remote access to your edge devices.
 
 [![Build & Publish Docker Image to Docker Hub](https://github.com/WeeJeWel/wg-easy/actions/workflows/deploy.yml/badge.svg?branch=production)](https://github.com/WeeJeWel/wg-easy/actions/workflows/deploy.yml)
 [![Lint](https://github.com/WeeJeWel/wg-easy/actions/workflows/lint.yml/badge.svg?branch=master)](https://github.com/WeeJeWel/wg-easy/actions/workflows/lint.yml)
@@ -16,26 +17,20 @@ The original open source repository and the author can be found [here](https://g
 
 ## Features
 
-* All-in-one: WireGuard + Web UI.
-* Easy installation, simple to use.
-* List, create, edit, delete, enable & disable clients.
-* Show a client's QR code.
-* Download a client's configuration file.
-* Statistics for which clients are connected.
-* Tx/Rx charts for each connected client.
-* Gravatar support.
+- **All-in-one: WireGuard + Web UI.**
+- **Easy installation, simple to use.**
+- **List, create, edit, delete, enable & disable clients.**
+- **Show a client's QR code.**
+- **Download a client's configuration file.**
+- **Statistics for which clients are connected.**
+- **Tx/Rx charts for each connected client.**
+- **Gravatar support.**
 
 ## Requirements
-
 A Device with Liunx and a kernel that supports WireGuard (all modern kernels).
 
 
-### 3. Sponsor
-
-Are you enjoying this project? [Buy me a beer!](https://github.com/sponsors/WeeJeWel) 🍻
-
 ## Options
-
 These options can be configured in the parameters of the app:
 
 | Env | Default | Example | Description |
@@ -58,3 +53,6 @@ These options can be configured in the parameters of the app:
 
 * [Using WireGuard-Easy with Pi-Hole](https://github.com/WeeJeWel/wg-easy/wiki/Using-WireGuard-Easy-with-Pi-Hole)
 * [Using WireGuard-Easy with nginx/SSL](https://github.com/WeeJeWel/wg-easy/wiki/Using-WireGuard-Easy-with-nginx-SSL)
+
+### 3. Sponsor
+Are you enjoying this project? Sponsor the guys from WeeJeWel[Buy me a beer!](https://github.com/sponsors/WeeJeWel) 🍻
