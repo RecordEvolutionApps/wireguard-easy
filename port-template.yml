@@ -13,7 +13,6 @@ ports:
   - name: Web interface
     port: 51821
     main: true
-# This port is required for tunneling the VPN. This is currently not supported
-  # - name: VPN 
-  #   port: 51820
-  #   protocol: udp             # Possible values: "https" | "tcp" (default: "https")
+  - name: VPN 
+    port: 51820
+    protocol: udp
