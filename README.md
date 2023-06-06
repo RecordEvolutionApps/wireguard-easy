@@ -36,7 +36,6 @@ These options can be configured in the parameters of the app:
 | Env | Default | Example | Description |
 | - | - | - | - |
 | `PASSWORD` | `admin` | `foobar123` | When set, requires a password when logging in to the Web UI. |
-
 | `WG_MTU` | `null` | `1420` | The MTU the clients will use. Server uses default WG MTU. |
 | `WG_PERSISTENT_KEEPALIVE` | `0` | `25` | Value in seconds to keep the "connection" open. If this value is 0, then connections won't be kept alive. |
 | `WG_DEFAULT_ADDRESS` | `10.8.0.x` | `10.6.0.x` | Clients IP address range. |
