@@ -17,3 +17,4 @@ ports:
   - name: VPN 
     port: 51820
     protocol: udp
+    remote_port_environment: WG_PORT
