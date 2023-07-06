@@ -50,21 +50,21 @@ WG_ALLOWED_IPS:
     defaultValue: 0.0.0.0/0, ::/0
 
 WG_PRE_UP:
-    label: Wireguard pre up command
+    label: WireGuard pre-up command
     type: textarea
     defaultValue: # iptables -t nat -A POSTROUTING -j MASQUERADE -o eth0
 
 WG_POST_UP:
-    label: Wireguard post up command
+    label: WireGuard post-up command
     type: textarea
     defaultValue: iptables -t mangle -A PREROUTING -i wg0 -j MARK --set-mark 0x30; iptables -t nat -A POSTROUTING ! -o wg0 -m mark --mark 0x30 -j MASQUERADE; iptables -A INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT;
 
 WG_PRE_DOWN:
-    label: Wireguard pre down command
+    label: WireGuard pre-down command
     type: textarea
     defaultValue: # iptables -t nat -D POSTROUTING -j MASQUERADE -o eth0
 
 WG_POST_DOWN:
-    label: Wireguard post down command
+    label: WireGuard post-down command
     type: textarea
     defaultValue: 
