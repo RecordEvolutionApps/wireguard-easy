@@ -28,15 +28,15 @@ A Device with Liunx and a kernel that supports WireGuard (all modern kernels).
 ## Options
 These options can be configured in the parameters of the app:
 
-| Env | Default | Example | Description |
-| - | - | - | - |
-| `Admin Password` | `admin` | `foobar123` | When set, requires a password when logging in to the Web UI. |
-| `MTU` | `null` | `1420` | The MTU the clients will use. Server uses default WG MTU. |
-| `Persistent Kepp Alive` | `0` | `25` | Value in seconds to keep the "connection" open. If this value is 0, then connections won't be kept alive. |
-| `Clients IP Address Range` | `10.8.0.x` | `10.6.0.x` | Clients IP address range. |
-| `DNS Server Clients will use` | `1.1.1.1` | `8.8.8.8, 8.8.4.4` | DNS server clients will use. |
-| `Allowed IPs clients will use` | `0.0.0.0/0, ::/0` | `192.168.15.0/24, 10.0.1.0/24` | Allowed IPs clients will use. |
-| `WireGuard pre-up command` | `...` | - | See [config.js](https://github.com/WeeJeWel/wg-easy/blob/master/src/config.js#L19) for the default value. |
-| `WireGuard post-up command` | `iptables -t mangle -A PREROUTING -i wg0 -j MARK --set-mark 0x30; iptables -t nat -A POSTROUTING ! -o wg0 -m mark --mark 0x30 -j MASQUERADE; iptables -A INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT;` | `iptables ...` | See [config.js](https://github.com/WeeJeWel/wg-easy/blob/master/src/config.js#L20) for the default value. |
-| `WireGuard pre-down command` | `...` | - | See [config.js](https://github.com/WeeJeWel/wg-easy/blob/master/src/config.js#L27) for the default value. |
-| `WireGuard post-down command` | `...` | `iptables ...` | See [config.js](https://github.com/WeeJeWel/wg-easy/blob/master/src/config.js#L28) for the default value. |
+| Parameter | Default | Description |
+| - | - |  - |
+| Admin Password | `admin` | When set, requires a password when logging in to the Web UI. |
+| MTU | `1420` |  The MTU the clients will use. Server uses default WireGuard MTU. |
+| Persistent Kepp Alive | `0` |  Value in seconds to keep the "connection" open. If this value is 0, then connections won't be kept alive. |
+| Clients IP Address Range | `10.8.0.x` |  Clients IP address range. |
+| DNS Server Clients will use | `1.1.1.1` |  DNS server clients will use. |
+| Allowed IPs clients will use | `0.0.0.0/0, ::/0` | Allowed IPs clients will use. |
+| WireGuard pre-up command |  | Networking Know How required |
+| WireGuard post-up command | `iptables -t mangle -A PREROUTING -i wg0 -j MARK --set-mark 0x30; iptables -t nat -A POSTROUTING ! -o wg0 -m mark --mark 0x30 -j MASQUERADE; iptables -A INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT;`  | Networking Know How required |
+| WireGuard pre-down command |   | Networking Know How required |
+| WireGuard post-down command |  | Networking Know How required |
