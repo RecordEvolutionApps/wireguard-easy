@@ -11,12 +11,12 @@
 #     type: text
 #     defaultValue: https://xxxx-wireguardeasy-51821.app.record-evolution.com/
 
-PASSWORD:
-    label: Admin Password
-    type: text
-    defaultValue: admin
-    secret: true
-    description: The password of the admin user
+# PASSWORD:
+#     label: Admin Password
+#     type: text
+#     defaultValue: admin
+#     secret: true
+#     description: The password of the admin user
 
 WG_MTU:
     label: MTU
