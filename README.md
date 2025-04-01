@@ -8,7 +8,7 @@ WireGuard is a modern and speedy VPN that uses advanced cryptography. It's desig
 
 ## Here's what the app offers
 
-First off, this app is just a packaging of the original great work hosted in this GitHub repository [here](https://github.com/wg-easy/wg-easy). The code for this derived app can be found here.
+First off, this app is just a packaging of the original great work hosted in this GitHub repository [here](https://github.com/wg-easy/wg-easy). The code for this derived app can be found [here](https://github.com/RecordEvolutionApps/wireguard-easy).
 
 [![Build & Publish latest Image](https://github.com/wg-easy/wg-easy/actions/workflows/deploy.yml/badge.svg?branch=production)](https://github.com/wg-easy/wg-easy/actions/workflows/deploy.yml)
 [![Lint](https://github.com/wg-easy/wg-easy/actions/workflows/lint.yml/badge.svg?branch=master)](https://github.com/wg-easy/wg-easy/actions/workflows/lint.yml)
