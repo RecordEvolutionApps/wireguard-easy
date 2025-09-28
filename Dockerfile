@@ -1,5 +1,14 @@
-FROM ghcr.io/wg-easy/wg-easy:14
+FROM ghcr.io/wg-easy/wg-easy:15.1.0
 
-COPY entrypoint.sh /entrypoint.sh
+RUN apk add --no-cache python3 py3-pip
 
-CMD "/entrypoint.sh"
+WORKDIR /ironflock
+
+COPY requirements.txt .
+RUN pip3 install -r requirements.txt --break-system-packages
+COPY register_device.py .
+COPY entrypoint.sh .
+
+WORKDIR /app
+
+CMD "/ironflock/entrypoint.sh"

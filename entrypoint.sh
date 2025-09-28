@@ -48,5 +48,7 @@ else
     echo "Successfully created symbolic link from '$settings_dir' to '$data_dir'."
 fi
 
+python3 -u /ironflock/register_device.py
 
-WG_HOST="$DEVICE_KEY-wireguardeasy-51821.app.ironflock.com" node server.js
+
+WG_HOST="$DEVICE_KEY-wireguardeasy-51821.app.ironflock.com" node /app/server/index.mjs

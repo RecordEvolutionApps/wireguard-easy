@@ -1,0 +1,20 @@
+data:
+  tables:
+    - tablename: devices
+      chunkTimeInterval: 1 year
+      maintainLatestFlagFor: ['devname'] # (optional) This table will mark the latest row for each unique value in the 'machinename' column (in the special boolean column "latest_flag"). This is useful for semantic updates on entities (e.g. machines) in tables.
+      columns:
+        - id: tsp
+          name: Timestamp
+          description: Timestamp of Measurement
+          dataType: timestamp
+        - id: url
+          name: Web Url
+          description: The remote access web url of the hosted app
+          dataType: string
+        - id: devname
+          name: Device Name
+          description: Name of Device
+          path: kwargs.DEVICE_NAME
+          dataType: string
+    
