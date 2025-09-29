@@ -68,3 +68,8 @@ WG_POST_DOWN:
     label: WireGuard post-down command
     type: textarea
     defaultValue: 
+
+DISABLE_IPV6:
+    label: Disable DISABLE_IPV6
+    type: boolean
+    defaultValue: true
