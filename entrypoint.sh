@@ -51,4 +51,4 @@ fi
 python3 -u /ironflock/register_device.py
 
 
-WG_HOST="$DEVICE_KEY-wireguardeasy-51821.app.ironflock.com" node /app/server/index.mjs
+WG_HOST="$DEVICE_KEY-wireguard_easy-51821.app.ironflock.com" node /app/server/index.mjs

@@ -14,7 +14,7 @@ async def main():
             "devices",
             {
                 "tsp": datetime.now().astimezone().isoformat(),
-                "url": f"https://{DEVICE_KEY}-wireguardeasy-51821.app.ironflock.com",
+                "url": f"https://{DEVICE_KEY}-wireguard_easy-51821.app.ironflock.com",
                 "state": 1,
             },
         )
