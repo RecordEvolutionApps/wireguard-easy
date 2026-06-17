@@ -74,6 +74,13 @@ echo "  INIT_ALLOWED_IPS = ${INIT_ALLOWED_IPS:-<unset>}"
 echo "  DISABLE_IPV6     = ${DISABLE_IPV6:-<unset>}"
 echo "  INSECURE         = ${INSECURE:-<unset>}"
 echo "  DEVICE_KEY       = ${DEVICE_KEY:-<unset>}"
+# Clean-slate marker: the DB is created by node on first boot, so if it already exists here we are
+# starting on persisted data and INIT_* will NOT be applied (setup is already initialized).
+if [ -f "$data_dir/wg-easy.db" ]; then
+  echo "  DATA STATE       = EXISTING — persisted DB found at $data_dir/wg-easy.db; INIT_* is IGNORED (credentials come from the existing DB)"
+else
+  echo "  DATA STATE       = FRESH — clean slate, no database yet; INIT_* will create the admin user on this boot"
+fi
 echo "=============================================================="
 
 
