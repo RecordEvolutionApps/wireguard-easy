@@ -74,6 +74,14 @@ echo "  INIT_ALLOWED_IPS = ${INIT_ALLOWED_IPS:-<unset>}"
 echo "  DISABLE_IPV6     = ${DISABLE_IPV6:-<unset>}"
 echo "  INSECURE         = ${INSECURE:-<unset>}"
 echo "  DEVICE_KEY       = ${DEVICE_KEY:-<unset>}"
+# Persistence check: wg-easy opens file:/etc/wireguard/wg-easy.db, and this entrypoint symlinks
+# /etc/wireguard -> /data, so the DB physically lives at /data/wg-easy.db. Only /data survives
+# restarts, so warn loudly if that symlink is not in place.
+if [ -L "$settings_dir" ] && [ "$(readlink "$settings_dir")" = "$data_dir" ]; then
+  echo "  DB STORAGE       = OK ($settings_dir -> $data_dir) — DB persists at $data_dir/wg-easy.db"
+else
+  echo "  DB STORAGE       = WARNING: $settings_dir is NOT linked to $data_dir — the DB may NOT persist across restarts!"
+fi
 # Clean-slate marker: the DB is created by node on first boot, so if it already exists here we are
 # starting on persisted data and INIT_* will NOT be applied (setup is already initialized).
 if [ -f "$data_dir/wg-easy.db" ]; then
