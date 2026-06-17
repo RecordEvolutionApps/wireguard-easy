@@ -1,4 +1,4 @@
-FROM ghcr.io/wg-easy/wg-easy:15.1.0
+FROM ghcr.io/wg-easy/wg-easy:15.3.0
 
 RUN apk add --no-cache python3 py3-pip
 

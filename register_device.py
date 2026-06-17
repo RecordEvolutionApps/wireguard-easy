@@ -5,28 +5,22 @@ import os
 
 DEVICE_KEY = os.environ["DEVICE_KEY"]
 
+
 async def main():
-    ironflock = IronFlock()  # no mainFunc
+    # runs once after the connection joins the router
+    print("########### Storing Device info ################")
+    await ironflock.publish_to_table(
+        "devices",
+        {
+            "tsp": datetime.now().astimezone().isoformat(),
+            "url": f"https://{DEVICE_KEY}-wireguard_easy-51821.app.ironflock.com",
+            "state": 1,
+        },
+    )
+    print("done")
+    # returning here lets run() stop the connection cleanly — no manual stop needed
 
-    async def run_once(session, details):
-        print("########### Storing Device info ################")
-        await ironflock.publish_to_table(
-            "devices",
-            {
-                "tsp": datetime.now().astimezone().isoformat(),
-                "url": f"https://{DEVICE_KEY}-wireguard_easy-51821.app.ironflock.com",
-                "state": 1,
-            },
-        )
-        print("done")
-        # schedule stop safely after current task
-        asyncio.create_task(ironflock.component.stop())
-
-    # attach the callback before starting
-    ironflock.component.on_join(run_once)
-
-    # start the component (blocking until stop is called)
-    await ironflock.component.start()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    ironflock = IronFlock(mainFunc=main)
+    ironflock.run()  # blocks until main() returns, then shuts down
