@@ -4,24 +4,19 @@ widgets:
     package_name: widget-navbar
     version: 1.0.14
     chartconfig:
-      route: $str:/
-      leadingSlash: null
-      trailingSlash: null
-      variables: []
       title: $str:Home
       style:
         fontWeight: $num:400
         fontSize: $num:16
       navItems:
         tableRef:
-          tablename: devices
           queryParams:
             limit: 500
             filterAnd:
-              - column: latest_flag
-                operator: =
+              - operator: =
                 value: "true"
                 dataType: boolean
+                column: latest_flag
           format:
             trailingSlash: null
             label: devname
@@ -29,6 +24,11 @@ widgets:
             route: devname
             leadingSlash: null
             variables: []
+          tablename: devices
+      route: $str:/
+      leadingSlash: null
+      trailingSlash: null
+      variables: []
     custom_style: null
   - layout_id: 823116a1-d080-42de-be05-891b23a3df12
     package_name: widget-embed
@@ -39,6 +39,7 @@ widgets:
           tablename: devices
           column: url
           queryParams:
+            limit: 1
             filterAnd:
               - value: "1"
                 dataType: string
@@ -49,7 +50,6 @@ widgets:
                 column: latest_flag
                 operator: =
                 value: "true"
-            limit: 1
       title: null
       multiEmbed: $bool:false
     custom_style:
@@ -60,7 +60,7 @@ widgets:
     chartconfig:
       data: []
       markdown: |-
-        $str:# ⬆️ Pick a gateway above above to set up VPN ⬆️
+        $str:# ⬆️ Pick a gateway above to set up a VPN ⬆️
 
         ## Secure, Fast, and Easy Remote Access with WireGuard
 
