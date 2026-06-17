@@ -92,6 +92,31 @@ if [ -f "$data_dir/wg-easy.db" ]; then
 else
   echo "  DATA STATE       = FRESH — clean slate, no database yet; INIT_* will create the admin user on this boot"
 fi
+# Endpoint self-heal: the device agent injects $WG_PORT (the live frp-proxied UDP port) on every
+# start, and it can change across restarts. wg-easy stores the client Endpoint (host:port) in the DB
+# and only honours INIT_* on the first boot, so on an existing DB we rewrite it here to the current
+# values. This also auto-repairs instances first initialised with the wrong host/port.
+# NOTE: this takes ownership of the interface Host/Port — do not edit them in the Admin UI for this app.
+if [ -n "${WG_PORT}" ] && [ -f "$data_dir/wg-easy.db" ]; then
+  python3 - "$data_dir/wg-easy.db" "app.ironflock.com" "${WG_PORT}" <<'PY'
+import sqlite3, sys
+db, host, port = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    port = int(port)
+except ValueError:
+    print(f"  ENDPOINT SYNC    = skipped (WG_PORT='{port}' not numeric)")
+    sys.exit(0)
+con = sqlite3.connect(db)
+try:
+    cur = con.execute("UPDATE user_configs_table SET host = ?, port = ?", (host, port))
+    con.commit()
+    print(f"  ENDPOINT SYNC    = client Endpoint set to {host}:{port} ({cur.rowcount} row(s))")
+except sqlite3.OperationalError as e:
+    print(f"  ENDPOINT SYNC    = skipped ({e})")
+finally:
+    con.close()
+PY
+fi
 echo "=============================================================="
 
 
