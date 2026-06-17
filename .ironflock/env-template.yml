@@ -6,70 +6,51 @@
 # NOTE: Template entries without a label property will not be displayed
 # NOTE: the "label" and "type" must be present on each variable
 
-# WG_HOST:
-#     label: Public IP Address or Hostname
-#     type: text
-#     defaultValue: https://xxxx-wireguardeasy-51821.app.record-evolution.com/
+# This app is based on wg-easy v15. On the FIRST start (empty database) the admin account is
+# created automatically from INIT_USERNAME / INIT_PASSWORD below, so the setup wizard is skipped
+# and you can log straight into the Web UI.
+#
+# IMPORTANT: every INIT_* value is applied ONLY on the very first start. Changing it later has no
+# effect — adjust those settings afterwards directly in the Web UI.
+#
+# The VPN host/port (INIT_HOST / INIT_PORT) and INIT_ENABLED are derived from the device and set
+# in entrypoint.sh. The legacy WG_* / PASSWORD variables are no longer used by wg-easy v15.
+# Docs: https://wg-easy.github.io/wg-easy/v15.2/advanced/config/unattended-setup/
 
-# PASSWORD:
-#     label: Admin Password
-#     type: text
-#     defaultValue: admin
-#     secret: true
-#     description: The password of the admin user
-
-WG_MTU:
-    label: MTU
-    defaultValue: 1420
-    type: numeric
-    min: 0
-    step: 1
-    description: The MTU the clients will use.
-
-WG_PERSISTENT_KEEPALIVE:
-    label: Persistent Keep Alive
-    type: numeric
-    defaultValue: 0
-    min: 0
-    step: 1
-    unit: 'seconds'
-
-WG_DEFAULT_ADDRESS:
-    label: Clients IP Address Range
+INIT_USERNAME:
+    label: Admin Username
     type: text
-    defaultValue: 10.8.0.x
+    defaultValue: admin
+    description: Initial admin username (min. 2 characters). Only applied on the first start.
 
-WG_DEFAULT_DNS:
+INIT_PASSWORD:
+    label: Admin Password
+    type: text
+    secret: true
+    defaultValue: wireguard1234
+    description: Initial admin password. MUST be at least 12 characters or login will fail. Change it after the first login. Only applied on the first start.
+
+INIT_DNS:
     label: DNS Server clients will use
     type: text
     defaultValue: 1.1.1.1
+    description: Comma-separated DNS server(s) handed to clients. Only applied on the first start.
 
-WG_ALLOWED_IPS:
+INIT_ALLOWED_IPS:
     label: Allowed IPs clients will use
     type: text
     defaultValue: 0.0.0.0/0, ::/0
-
-WG_PRE_UP:
-    label: WireGuard pre-up command
-    type: textarea
-    defaultValue: # iptables -t nat -A POSTROUTING -j MASQUERADE -o eth0
-
-WG_POST_UP:
-    label: WireGuard post-up command
-    type: textarea
-    defaultValue: iptables -t mangle -A PREROUTING -i wg0 -j MARK --set-mark 0x30; iptables -t nat -A POSTROUTING ! -o wg0 -m mark --mark 0x30 -j MASQUERADE; iptables -A INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT;
-
-WG_PRE_DOWN:
-    label: WireGuard pre-down command
-    type: textarea
-    defaultValue: # iptables -t nat -D POSTROUTING -j MASQUERADE -o eth0
-
-WG_POST_DOWN:
-    label: WireGuard post-down command
-    type: textarea
-    defaultValue: 
+    description: Comma-separated Allowed IPs for clients. Only applied on the first start.
 
 DISABLE_IPV6:
-    label: Disable DISABLE_IPV6
+    label: Disable IPv6
     type: boolean
     defaultValue: true
+    description: Disable IPv6 support on the server.
+
+# Runtime setting (applied on every start, not just the first one).
+INSECURE:
+    label: Allow insecure HTTP access
+    type: boolean
+    defaultValue: false
+    description: Keep this OFF when using the HTTPS app URL (the gateway provides TLS). Turn ON only to allow login over plain HTTP, e.g. direct LAN access without the gateway — the session cookie is then no longer HTTPS-only, so use it only on trusted networks.

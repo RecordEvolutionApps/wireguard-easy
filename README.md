@@ -36,24 +36,27 @@ With our WireGuard-powered app, you get uncompromising security and blazing-fast
 
 ## Requirements
 
-An Edge Device with Liunx and a kernel that supports WireGuard (all modern kernels).
+An Edge Device running Linux (amd64 or arm64) with a kernel that supports WireGuard (all modern kernels).
+
+> **Note:** wg-easy v15 no longer supports 32-bit ARM (armv6/armv7).
+
+## First login
+
+This app is based on **wg-easy v15**. On the first start the admin account is created automatically from the `Admin Username` / `Admin Password` parameters below, so the setup wizard is skipped and you can log straight into the Web UI. **Change the default password right after your first login.**
 
 ## Options
 
-These options can be configured in the parameters of the app:
+These options can be configured in the parameters of the app. All values below are applied **only on the first start** (while the database is still empty) — change them afterwards directly in the Web UI.
 
 | Parameter | Default | Description |
 | - | - |  - |
-| Admin Password | `admin` | When set, requires a password when logging in to the Web UI. |
-| MTU | `1420` |  The MTU the clients will use. Server uses default WireGuard MTU. |
-| Persistent Kepp Alive | `0` |  Value in seconds to keep the "connection" open. If this value is 0, then connections won't be kept alive. |
-| Clients IP Address Range | `10.8.0.x` |  Clients IP address range. |
-| DNS Server Clients will use | `1.1.1.1` |  DNS server clients will use. |
-| Allowed IPs clients will use | `0.0.0.0/0, ::/0` | Allowed IPs clients will use. |
-| WireGuard pre-up command |  | Networking Know How required |
-| WireGuard post-up command | `iptables -t mangle -A PREROUTING -i wg0 -j MARK --set-mark 0x30; iptables -t nat -A POSTROUTING ! -o wg0 -m mark --mark 0x30 -j MASQUERADE; iptables -A INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT;`  | Networking Know How required |
-| WireGuard pre-down command |   | Networking Know How required |
-| WireGuard post-down command |  | Networking Know How required |
+| Admin Username | `admin` | Initial admin username (min. 2 characters). |
+| Admin Password | `wireguard1234` | Initial admin password (min. 12 characters). Change it after the first login. |
+| DNS Server clients will use | `1.1.1.1` | DNS server(s) handed to clients, comma-separated. |
+| Allowed IPs clients will use | `0.0.0.0/0, ::/0` | Allowed IPs for clients, comma-separated. |
+| Disable IPv6 | `true` | Disable IPv6 support on the server. |
+
+Other WireGuard settings (MTU, persistent keep-alive, client IP range, and the pre/post-up & down hooks) are no longer environment variables in v15 — they are managed in the Web UI.
 
 ## License
 

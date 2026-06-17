@@ -50,5 +50,11 @@ fi
 
 python3 -u /ironflock/register_device.py
 
+# wg-easy v15 configures the VPN host/port once, on the first start, via INIT_HOST/INIT_PORT
+# (the old WG_HOST variable is no longer used). Together with INIT_USERNAME/INIT_PASSWORD from
+# the app settings this completes the unattended setup, so no setup wizard is shown.
+export INIT_ENABLED="${INIT_ENABLED:-true}"
+export INIT_HOST="${INIT_HOST:-${DEVICE_KEY}-wireguard_easy-51820.app.ironflock.com}"
+export INIT_PORT="${INIT_PORT:-51820}"
 
-WG_HOST="$DEVICE_KEY-wireguard_easy-51821.app.ironflock.com" node /app/server/index.mjs
+exec /usr/bin/dumb-init node /app/server/index.mjs
