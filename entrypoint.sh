@@ -50,12 +50,15 @@ fi
 
 python3 -u /ironflock/register_device.py
 
-# wg-easy v15 configures the VPN host/port once, on the first start, via INIT_HOST/INIT_PORT
-# (the old WG_HOST variable is no longer used). Together with INIT_USERNAME/INIT_PASSWORD from
-# the app settings this completes the unattended setup, so no setup wizard is shown.
+# wg-easy v15 sets the client-facing VPN endpoint once, on the first start, via INIT_HOST / INIT_PORT
+# (these become "Endpoint = host:port" in every client config). WireGuard is UDP and does NOT travel
+# over the HTTPS app subdomain — it must point at IronFlock's frp UDP edge:
+#   host = app.ironflock.com   port = the frp-assigned public UDP port, injected by the platform as $WG_PORT
+# The server still LISTENS on 51820 inside the container; frp forwards $WG_PORT -> 51820.
+# NOTE: these only apply on a FRESH database. On an existing instance, change Host/Port in the Admin UI.
 export INIT_ENABLED="true"
-export INIT_HOST="${INIT_HOST:-${DEVICE_KEY}-wireguard_easy-51820.app.ironflock.com}"
-export INIT_PORT="${INIT_PORT:-51820}"
+export INIT_HOST="${INIT_HOST:-app.ironflock.com}"
+export INIT_PORT="${INIT_PORT:-${WG_PORT:-51820}}"
 
 # Print the effective configuration on start so it can be validated in the container logs.
 # The admin password is masked (presence + length only) so it is never written to the logs.
