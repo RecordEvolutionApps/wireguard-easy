@@ -13,7 +13,9 @@ ports:
   - name: Web interface
     port: 51821
     main: true
-# This port is required for tunneling the VPN. This is currently not supported
+# UDP port carrying the VPN itself. The platform tunnel forwards the assigned public port to
+# 51820 in this container and injects the public port number via WG_PORT (see
+# remote_port_environment); register_device.py reads it live to keep client Endpoints correct.
   - name: VPN 
     port: 51820
     protocol: udp

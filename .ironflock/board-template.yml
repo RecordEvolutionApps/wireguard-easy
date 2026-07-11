@@ -108,7 +108,7 @@ widgets:
 
         ## Options
 
-        These options can be configured in the parameters of the app. All values below are applied only on the first start (while the database is still empty) — change them afterwards in the Web UI.
+        These options can be configured in the parameters of the app. All values below are applied only on the first start (while the database is still empty) — change them afterwards in the Web UI. Exception: **Allowed IPs clients will use** is re-applied whenever you change the parameter; it then affects newly created clients only (existing clients keep their own value — edit or recreate them in the Web UI).
 
         | Parameter | Default | Description |
         | - | - |  - |
@@ -124,25 +124,25 @@ widgets:
 
         The most common setup: this app runs on a gateway that shares a local network with a PLC (or another machine), and you want to use tools like TIA Portal or Codesys from your laptop through the VPN — while your browser and other applications keep using your normal internet connection.
 
-        That is a *split tunnel*, and it is controlled by the **Allowed IPs clients will use** parameter: it becomes the `AllowedIPs` line of every downloaded client config and tells your laptop which destinations are routed through the VPN. Everything else stays on your normal connection.
+        That is a *split tunnel*, and you configure it per client in the WireGuard Web UI. The client's **Allowed IPs** become the `AllowedIPs` line of its downloaded config and tell your laptop which destinations are routed through the VPN — everything else stays on your normal connection.
 
-        Set it to the VPN subnet plus the machine network, for example:
+        1. Open the Web UI and create (or edit) the client for your laptop.
+        2. Set the client's **Allowed IPs** to the addresses that should go through the VPN. IP ranges are written in CIDR notation:
+           * a single device ends in `/32`, e.g. `192.168.0.123/32` for the PLC at 192.168.0.123
+           * a whole network uses a shorter suffix, e.g. `192.168.0.0/24` for all of 192.168.0.x
+           * always include the VPN's own subnet `10.8.0.0/24` (the default of this app)
 
-        ```text
-        10.8.0.0/24, 192.168.0.0/24
-        ```
+           Example for one PLC: `10.8.0.0/24, 192.168.0.123/32`
+        3. Download the client config on the laptop and connect. The setting is baked into the downloaded file — **re-download after every change**.
 
-        * `10.8.0.0/24` is the VPN's internal subnet (the default of this app).
-        * `192.168.0.0/24` is the local network the PLC is connected to — replace it with your machine subnet, or list individual machines as `/32` entries (e.g. `192.168.0.10/32`).
-
-        With the default `0.0.0.0/0, ::/0` you get a *full* tunnel instead: **all** laptop traffic — including web browsing — travels through the plant gateway.
+        Traffic to those addresses now goes through the VPN; your browser and every other application keep using the laptop's normal internet connection. With `0.0.0.0/0, ::/0` as Allowed IPs you get a *full* tunnel instead: **all** laptop traffic — including web browsing — travels through the plant gateway.
 
         Notes:
 
-        * The parameter is applied **only on the first start**. On an existing installation change *Allowed IPs* in the Web UI instead — and **re-download the client config** on the laptop afterwards, because the setting is baked into the downloaded file.
+        * Prefer narrow `/32` entries: if your home or office network uses the same range as the machine network (e.g. both `192.168.0.x`), a whole-subnet route conflicts with your local network.
         * Connect to the PLC by its **IP address**. TIA Portal's "Accessible devices" scan (PROFINET DCP) uses Layer-2 broadcasts, which do not cross a routed VPN.
-        * Avoid subnet overlap: if your home or office network uses the same range as the machine network (e.g. both `192.168.0.0/24`), routing breaks — prefer narrow `/32` entries in that case.
         * No changes are needed on the PLC: VPN traffic is masqueraded to the gateway's own LAN address. (If your gateway's LAN interface is not `eth0`, adjust the interface device in the Web UI.)
+        * The app parameter *Allowed IPs clients will use* only sets the **default** for newly created clients.
 
         ## License
 

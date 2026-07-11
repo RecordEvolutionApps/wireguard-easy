@@ -60,18 +60,20 @@ else
     echo "Successfully created symbolic link from '$settings_dir' to '$data_dir'."
 fi
 
-# Seed the client-facing VPN endpoint for the very first boot (wg-easy applies INIT_HOST /
-# INIT_PORT only while the database does not exist yet). WireGuard is UDP and does NOT travel
-# over the HTTPS app subdomain — clients connect through the IronFlock tunnel's UDP edge, so the
-# seed uses the agent-injected TUNNEL_DOMAIN and public tunnel port WG_PORT when present. This is
-# a best-effort snapshot: the authoritative endpoint is computed by the ironflock SDK and kept in
-# sync by register_device.py (started below), which rewrites the DB within seconds of any change —
-# including devices whose tunnel is only activated later (the agent updates the /data/env files
-# in running containers without a restart). The server always LISTENS on 51820 inside the
-# container; the tunnel forwards the public port there.
+# Seed the VPN endpoint for the very first boot (wg-easy applies INIT_HOST / INIT_PORT only while
+# the database does not exist yet). WireGuard is UDP and does NOT travel over the HTTPS app
+# subdomain — clients connect through the IronFlock tunnel's UDP edge, so the host is seeded from
+# the agent-injected TUNNEL_DOMAIN.
+# INIT_PORT must stay 51820: wg-easy's first-boot setup writes it to BOTH the advertised client
+# endpoint AND the wg ListenPort (updateHostPort), and the tunnel always forwards the public UDP
+# port to 51820 inside the container — seeding the public port here would make wg listen on the
+# wrong port and break every handshake. The advertised endpoint (host and public port) is
+# corrected to the live tunnel values by register_device.py (started below) within seconds, also
+# for devices whose tunnel is only activated later (the agent updates the /data/env files in
+# running containers without a restart).
 export INIT_ENABLED="true"
 export INIT_HOST="${INIT_HOST:-${TUNNEL_DOMAIN:-app.ironflock.com}}"
-export INIT_PORT="${INIT_PORT:-${WG_PORT:-51820}}"
+export INIT_PORT="${INIT_PORT:-51820}"
 
 # Print the effective configuration on start so it can be validated in the container logs.
 # The admin password is masked (presence + length only) so it is never written to the logs.
