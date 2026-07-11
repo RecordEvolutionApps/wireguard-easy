@@ -1,5 +1,17 @@
 #!/bin/bash
 
+# Forwarding sysctls: on the device the agent runs this container privileged, so
+# it can set its own network-namespace sysctls. Under host networking these are
+# already 1 (Docker enables ip_forward on the host), so this is a no-op today —
+# but once the agent moves apps onto bridge networking the container starts with
+# ip_forward=0 in its own namespace, and without it VPN clients connect fine yet
+# route nowhere. src_valid_mark is required by wg-quick's policy routing.
+sysctl -w net.ipv4.ip_forward=1 || echo "WARNING: failed to enable net.ipv4.ip_forward — VPN clients will NOT be able to route traffic!"
+sysctl -w net.ipv4.conf.all.src_valid_mark=1 || echo "WARNING: failed to set net.ipv4.conf.all.src_valid_mark"
+if [ "${DISABLE_IPV6}" != "true" ]; then
+  sysctl -w net.ipv6.conf.all.forwarding=1 || echo "WARNING: failed to enable net.ipv6.conf.all.forwarding — IPv6 VPN clients will NOT be able to route traffic!"
+fi
+
 settings_dir="/etc/wireguard"
 data_dir="/data"
 
@@ -48,16 +60,17 @@ else
     echo "Successfully created symbolic link from '$settings_dir' to '$data_dir'."
 fi
 
-python3 -u /ironflock/register_device.py
-
-# wg-easy v15 sets the client-facing VPN endpoint once, on the first start, via INIT_HOST / INIT_PORT
-# (these become "Endpoint = host:port" in every client config). WireGuard is UDP and does NOT travel
-# over the HTTPS app subdomain — it must point at IronFlock's frp UDP edge:
-#   host = app.ironflock.com   port = the frp-assigned public UDP port, injected by the platform as $WG_PORT
-# The server still LISTENS on 51820 inside the container; frp forwards $WG_PORT -> 51820.
-# NOTE: these only apply on a FRESH database. On an existing instance, change Host/Port in the Admin UI.
+# Seed the client-facing VPN endpoint for the very first boot (wg-easy applies INIT_HOST /
+# INIT_PORT only while the database does not exist yet). WireGuard is UDP and does NOT travel
+# over the HTTPS app subdomain — clients connect through the IronFlock tunnel's UDP edge, so the
+# seed uses the agent-injected TUNNEL_DOMAIN and public tunnel port WG_PORT when present. This is
+# a best-effort snapshot: the authoritative endpoint is computed by the ironflock SDK and kept in
+# sync by register_device.py (started below), which rewrites the DB within seconds of any change —
+# including devices whose tunnel is only activated later (the agent updates the /data/env files
+# in running containers without a restart). The server always LISTENS on 51820 inside the
+# container; the tunnel forwards the public port there.
 export INIT_ENABLED="true"
-export INIT_HOST="${INIT_HOST:-app.ironflock.com}"
+export INIT_HOST="${INIT_HOST:-${TUNNEL_DOMAIN:-app.ironflock.com}}"
 export INIT_PORT="${INIT_PORT:-${WG_PORT:-51820}}"
 
 # Print the effective configuration on start so it can be validated in the container logs.
@@ -72,6 +85,7 @@ else
 fi
 echo "  INIT_HOST        = ${INIT_HOST:-<unset>}"
 echo "  INIT_PORT        = ${INIT_PORT:-<unset>}"
+echo "  ENDPOINT SYNC    = register_device.py keeps the client Endpoint in sync (background)"
 echo "  INIT_DNS         = ${INIT_DNS:-<unset>}"
 echo "  INIT_ALLOWED_IPS = ${INIT_ALLOWED_IPS:-<unset>}"
 echo "  DISABLE_IPV6     = ${DISABLE_IPV6:-<unset>}"
@@ -92,32 +106,12 @@ if [ -f "$data_dir/wg-easy.db" ]; then
 else
   echo "  DATA STATE       = FRESH — clean slate, no database yet; INIT_* will create the admin user on this boot"
 fi
-# Endpoint self-heal: the device agent injects $WG_PORT (the live frp-proxied UDP port) on every
-# start, and it can change across restarts. wg-easy stores the client Endpoint (host:port) in the DB
-# and only honours INIT_* on the first boot, so on an existing DB we rewrite it here to the current
-# values. This also auto-repairs instances first initialised with the wrong host/port.
-# NOTE: this takes ownership of the interface Host/Port — do not edit them in the Admin UI for this app.
-if [ -n "${WG_PORT}" ] && [ -f "$data_dir/wg-easy.db" ]; then
-  python3 - "$data_dir/wg-easy.db" "app.ironflock.com" "${WG_PORT}" <<'PY'
-import sqlite3, sys
-db, host, port = sys.argv[1], sys.argv[2], sys.argv[3]
-try:
-    port = int(port)
-except ValueError:
-    print(f"  ENDPOINT SYNC    = skipped (WG_PORT='{port}' not numeric)")
-    sys.exit(0)
-con = sqlite3.connect(db)
-try:
-    cur = con.execute("UPDATE user_configs_table SET host = ?, port = ?", (host, port))
-    con.commit()
-    print(f"  ENDPOINT SYNC    = client Endpoint set to {host}:{port} ({cur.rowcount} row(s))")
-except sqlite3.OperationalError as e:
-    print(f"  ENDPOINT SYNC    = skipped ({e})")
-finally:
-    con.close()
-PY
-fi
 echo "=============================================================="
 
+# All platform integration (device registration + keeping the client Endpoint in sync with the
+# tunnel) lives in register_device.py, which runs for the container's lifetime alongside the
+# server. Started in the background so an unreachable router can never block the VPN itself;
+# after the exec below it is reparented under dumb-init, which reaps it on container stop.
+python3 -u /ironflock/register_device.py &
 
 exec /usr/bin/dumb-init node /app/server/index.mjs

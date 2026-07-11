@@ -120,6 +120,30 @@ widgets:
 
         Other WireGuard settings (MTU, persistent keep-alive, client IP range, and the pre/post-up & down hooks) are no longer environment variables in v15 — they are managed in the Web UI.
 
+        ## Typical use case: reach a PLC while keeping normal internet access (split tunnel)
+
+        The most common setup: this app runs on a gateway that shares a local network with a PLC (or another machine), and you want to use tools like TIA Portal or Codesys from your laptop through the VPN — while your browser and other applications keep using your normal internet connection.
+
+        That is a *split tunnel*, and it is controlled by the **Allowed IPs clients will use** parameter: it becomes the `AllowedIPs` line of every downloaded client config and tells your laptop which destinations are routed through the VPN. Everything else stays on your normal connection.
+
+        Set it to the VPN subnet plus the machine network, for example:
+
+        ```text
+        10.8.0.0/24, 192.168.0.0/24
+        ```
+
+        * `10.8.0.0/24` is the VPN's internal subnet (the default of this app).
+        * `192.168.0.0/24` is the local network the PLC is connected to — replace it with your machine subnet, or list individual machines as `/32` entries (e.g. `192.168.0.10/32`).
+
+        With the default `0.0.0.0/0, ::/0` you get a *full* tunnel instead: **all** laptop traffic — including web browsing — travels through the plant gateway.
+
+        Notes:
+
+        * The parameter is applied **only on the first start**. On an existing installation change *Allowed IPs* in the Web UI instead — and **re-download the client config** on the laptop afterwards, because the setting is baked into the downloaded file.
+        * Connect to the PLC by its **IP address**. TIA Portal's "Accessible devices" scan (PROFINET DCP) uses Layer-2 broadcasts, which do not cross a routed VPN.
+        * Avoid subnet overlap: if your home or office network uses the same range as the machine network (e.g. both `192.168.0.0/24`), routing breaks — prefer narrow `/32` entries in that case.
+        * No changes are needed on the PLC: VPN traffic is masqueraded to the gateway's own LAN address. (If your gateway's LAN interface is not `eth0`, adjust the interface device in the Web UI.)
+
         ## License
 
         This project is licensed under the AGPL-3.0-only License - see the [LICENSE](LICENSE) file for details

@@ -40,7 +40,7 @@ INIT_ALLOWED_IPS:
     label: Allowed IPs clients will use
     type: text
     defaultValue: 0.0.0.0/0, ::/0
-    description: Comma-separated Allowed IPs for clients. Only applied on the first start.
+    description: Comma-separated Allowed IPs for clients. Only applied on the first start. Keep the default for a full tunnel (ALL laptop traffic goes through the gateway). For a split tunnel — reach machines behind the gateway while browsing the internet normally — set "10.8.0.0/24, <machine subnet>", e.g. "10.8.0.0/24, 192.168.0.0/24".
 
 DISABLE_IPV6:
     label: Disable IPv6
