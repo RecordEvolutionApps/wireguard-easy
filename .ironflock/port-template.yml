@@ -1,22 +1,25 @@
+# yaml-language-server: $schema=https://ironflock.com/schemas/port-template/v1.yml
 ############################################################
-# Sample Ports template
+# Ports of the WireGuard VPN app
 #
-# Defines the ports that a user of the app can enable access to.
-# Can be used to serve a user interface to users.
+# A production install opens a remote-access tunnel for each port. The two
+# ports travel two different paths: the Web UI (http) is served under an
+# HTTPS tunnel subdomain and embedded in the board; the VPN (udp) gets a
+# public UDP port on the tunnel domain, which clients use as their Endpoint.
 ############################################################
-
-# Note: All ports are closed by default on a device.
-# Note: Ports can potentially conflict with ports of other apps on the same device.
-# Note: Using a tcp protocol you can also stream RTSP Video directly
 
 ports:
+  # wg-easy admin Web UI. register_device.py publishes its tunnel URL to the
+  # gateways table (web_url) and the board embeds it. The port number is
+  # WEB_UI_PORT in vpn_state.py.
   - name: Web interface
     port: 51821
     main: true
-# UDP port carrying the VPN itself. The platform tunnel forwards the assigned public port to
-# 51820 in this container and injects the public port number via WG_PORT (see
-# remote_port_environment); register_device.py reads it live to keep client Endpoints correct.
-  - name: VPN 
+  # UDP port carrying the VPN itself. The platform tunnel forwards the assigned
+  # public port to 51820 in this container and injects the public port number
+  # via WG_PORT (see remote_port_environment); register_device.py reads it live
+  # to keep client Endpoints correct. The port number is VPN_PORT in vpn_state.py.
+  - name: VPN
     port: 51820
     protocol: udp
     remote_port_environment: WG_PORT

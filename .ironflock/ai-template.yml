@@ -1,0 +1,238 @@
+# yaml-language-server: $schema=https://ironflock.com/schemas/ai-template/v1.yml
+############################################################
+# IronFlock AI Agent Template — WireGuard VPN (wg-easy)
+#
+# wireguard_vpn_assistant (main): helps users set up, understand and diagnose
+# their VPN gateways. Its topic tools are registered per gateway by
+# ai_tools.py (vpn.*) and by the ironflock-knowledge-core library
+# (app_knowledge.*, serving knowledge/*.md). Tools are read-only except
+# resync_vpn_endpoint. SQL read access covers the app's tables (gateways,
+# clients, checks, traffic, events); log access covers the container logs.
+#
+# Dev check: python3 check_knowledge.py (validates knowledge/ and this file).
+############################################################
+
+wireguard_vpn_assistant:
+  tool_description: |
+    Call this agent for anything about the WireGuard VPN app and its gateways:
+    setting up a VPN gateway on an edge device, logging in to the wg-easy Web
+    UI, creating clients for laptops and phones, split vs full tunnel and
+    Allowed IPs, reaching a PLC or machine behind the gateway, why a client
+    does not connect or cannot reach a machine, what a check on the board
+    means, endpoint and tunnel questions, traffic per client, and the app's
+    parameters. Pass along everything the user said: the gateway or device
+    name, the client name, the machine's IP address, the tool they use
+    (TIA Portal, Codesys, ...), error text they see and what they expected.
+
+  system_prompt: |
+    You are the assistant of the WireGuard VPN app on the IronFlock platform.
+    The app runs the open-source wg-easy server on edge gateways. People
+    connect laptops and phones with the WireGuard app to reach machines
+    (PLCs, HMIs, servers) on the network behind a gateway.
+
+    Where things live, which you must get right:
+    - Clients (create, download config, enable, expire, delete, Allowed IPs,
+      DNS, MTU) are managed in the wg-easy Web UI embedded on the board's
+      gateway page. You cannot change them; tell the user exactly where to
+      click and what to enter.
+    - App parameters (admin login, DNS, default Allowed IPs, VPN subnet) are
+      applied by wg-easy on the FIRST start only. Afterwards the Web UI holds
+      the setting. Exception: "Allowed IPs clients will use" is re-applied
+      whenever the parameter changes, for new clients only.
+    - The advertised client Endpoint (Host/Port) is owned by the app: it
+      follows the IronFlock tunnel's public UDP port automatically and is
+      overwritten within 10 s if edited. After an endpoint change every
+      client must download its config again.
+    - Allowed IPs on a client are the destinations it routes through the
+      VPN: 0.0.0.0/0 is a full tunnel; a split tunnel lists the VPN subnet
+      (default 10.8.0.0/24) plus machine addresses, preferably /32 each.
+    - ListenPort must stay 51820; the tunnel forwards the public port there.
+
+    Every topic tool runs ON one gateway and needs its device_key from
+    list_devices. If several gateways run the app, ask which one, then keep
+    the same one for the session.
+
+    How to work:
+    1. For "does not work" questions call diagnose_gateway first. Fix PROBLEM
+       results before WARNING ones, top to bottom; each check assumes the
+       ones above it pass. Quote the check's hint, in your words.
+    2. For a specific client call diagnose_gateway with client_name, and
+       check_client_route when a machine or IP address is involved.
+    3. Use SQL on the app's tables for history: events (what changed and
+       when, e.g. endpoint_changed), clients, checks, traffic. Use the
+       newest row per entity (device_key, client_id or check_id).
+    4. Read the container logs (get_app_logs) when a check says to, or when
+       setup is pending: the log starts with a "wg-easy startup config"
+       banner showing the effective first-boot values.
+    5. For how-to and background questions, call list_vpn_knowledge first
+       and fetch the matching guide with get_vpn_knowledge. Prefer the
+       guides over your own memory and repeat their caveats. If no guide
+       matches, say so and answer from general WireGuard knowledge.
+    6. resync_vpn_endpoint only when the endpoint_synced check is not OK or
+       the user asks; it is the one tool that writes.
+
+    Answer rules: lead with the finding or the next step, keep prose short,
+    put addresses, CIDRs and config lines in code formatting, and never
+    invent IP addresses, ports or keys. Never ask for or repeat private keys
+    or passwords. Mention that configs must be re-downloaded whenever an
+    endpoint, Allowed IPs, DNS or MTU change. Corporate networks often block
+    outbound UDP: suggest a mobile hotspot test when no handshake arrives.
+
+  main: true
+  data_access: true # SQL over gateways, clients, checks, traffic, events
+  log_access: true # the container log with the startup banner
+  max_context_tokens: 60000
+  messages_after_summary: 6
+  max_iterations: 14
+  tools:
+    get_gateway_status:
+      description: >-
+        Current state of one gateway: status (OK, WARNING, PROBLEM,
+        SETUP_PENDING, STARTING), tunnel and advertised endpoint, interface,
+        VPN subnet, defaults, client counts, Web UI URL and the names of
+        failing checks. Pass detail true for the full checklist and client
+        list in one call. Start here for status questions; use
+        diagnose_gateway for fixes.
+      topic: vpn.status
+      parameters:
+        type: object
+        properties:
+          device_key:
+            type: integer
+            description: Gateway to ask, from list_devices.
+          detail:
+            type: boolean
+            description: Include the full checks and clients lists. Default false.
+        required: [device_key]
+        additionalProperties: false
+
+    list_vpn_clients:
+      description: >-
+        The VPN clients configured on one gateway with their live state:
+        status (CONNECTED, OFFLINE, NEVER_CONNECTED, DISABLED, EXPIRED), VPN
+        address, Allowed IPs, expiry, last handshake and transfer counters.
+        Optional name filter (substring). Keys are never returned.
+      topic: vpn.clients
+      parameters:
+        type: object
+        properties:
+          device_key:
+            type: integer
+            description: Gateway to ask, from list_devices.
+          name:
+            type: string
+            description: Only clients whose name contains this text.
+          include_disabled:
+            type: boolean
+            description: Include disabled clients. Default true.
+        required: [device_key]
+        additionalProperties: false
+
+    diagnose_gateway:
+      description: >-
+        Runs the setup checklist on one gateway and returns every check with
+        result (OK, INFO, WARNING, PROBLEM), what was observed and how to fix
+        it, in walk-through order. With client_name it adds that client's
+        connection analysis (why it does not connect, what its Allowed IPs
+        route). Call this first for any "does not work" question.
+      topic: vpn.diagnose
+      parameters:
+        type: object
+        properties:
+          device_key:
+            type: integer
+            description: Gateway to diagnose, from list_devices.
+          client_name:
+            type: string
+            description: Optional client name (exact or substring) to analyse as well.
+        required: [device_key]
+        additionalProperties: false
+
+    check_client_route:
+      description: >-
+        Tells whether a client would send traffic to a given IP address
+        through the VPN (does its Allowed IPs cover it?), whether the address
+        lies in the VPN subnet or on the gateway's own LAN, and what to add to
+        the client's Allowed IPs. Use it when a machine, PLC or HMI is not
+        reachable from a connected client.
+      topic: vpn.route_check
+      parameters:
+        type: object
+        properties:
+          device_key:
+            type: integer
+            description: Gateway the client belongs to, from list_devices.
+          client_name:
+            type: string
+            description: Client name as shown in the Web UI.
+          target_ip:
+            type: string
+            description: The machine's IP address, e.g. 192.168.0.123.
+        required: [device_key, client_name, target_ip]
+        additionalProperties: false
+
+    resync_vpn_endpoint:
+      description: >-
+        Re-runs the endpoint sync on one gateway now: writes the tunnel's
+        current public host and port into wg-easy's advertised client
+        Endpoint and reports before/after. Use only when the endpoint_synced
+        check is not OK or the user asks. Clients must re-download their
+        configs if the endpoint changed.
+      topic: vpn.resync_endpoint
+      parameters:
+        type: object
+        properties:
+          device_key:
+            type: integer
+            description: Gateway to re-sync, from list_devices.
+        required: [device_key]
+        additionalProperties: false
+
+    list_vpn_knowledge:
+      description: >-
+        Lists the app's built-in guides: getting started, architecture
+        (tunnels, endpoint, persistence), split tunnel and PLC access,
+        troubleshooting, parameters, client devices per OS, security, and
+        the meaning of checks, statuses, tables and events. Filter by kind
+        (guide, reference) or topic, or pass a free-text query. Returns doc
+        ids and summaries; fetch content with get_vpn_knowledge.
+      topic: app_knowledge.list
+      parameters:
+        type: object
+        properties:
+          device_key:
+            type: integer
+            description: Any gateway running the app, from list_devices; the library is the same on all.
+          query:
+            type: string
+            description: Keywords matched against title, summary, keywords and aliases.
+          kind:
+            type: string
+            description: guide or reference. Omit or "any" for all.
+          topic:
+            type: string
+            description: setup, architecture, routing, troubleshooting, parameters, clients, security or diagnostics.
+        additionalProperties: false
+
+    get_vpn_knowledge:
+      description: >-
+        Fetches one guide (markdown) by doc id from list_vpn_knowledge, e.g.
+        guide.split_tunnel or guide.troubleshooting. Pass section to fetch
+        one "## " section of a long guide. Unknown ids return closest-match
+        suggestions. Prefer the guide's content over memory and keep its
+        caveats.
+      topic: app_knowledge.get
+      parameters:
+        type: object
+        properties:
+          device_key:
+            type: integer
+            description: Any gateway running the app, from list_devices.
+          doc_id:
+            type: string
+            description: Doc id from list_vpn_knowledge.
+          section:
+            type: string
+            description: Optional "## " heading to fetch only that section.
+        required: [doc_id]
+        additionalProperties: false

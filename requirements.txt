@@ -1,1 +1,2 @@
-ironflock==1.6.1
+ironflock==1.11.0
+ironflock-knowledge-core @ git+https://github.com/RecordEvolutionApps/knowledge_core.git@v1.0.1

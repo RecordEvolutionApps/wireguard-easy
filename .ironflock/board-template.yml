@@ -1,195 +1,1152 @@
+# yaml-language-server: $schema=https://ironflock.com/schemas/board-template/v1.yml
+# Board of the WireGuard VPN app. Pages: / (fleet overview), /gateways/ (list),
+# /gateways/<device_key> (status + embedded wg-easy Web UI) with the tabs
+# clients, traffic, checks and events, and /guide. All widgets bind to the
+# tables in data-template.yml; the gateway pages filter by the device_key in
+# the route. The board editor in IronFlock rewrites this file on save.
 name: WireGuard_Easy
 widgets:
-  - layout_id: 697259b7-429a-40ba-83ff-c30fd64af85e
-    package_name: widget-navbar
-    version: 1.0.14
+  - layout_id: checks-table
+    package_name: widget-table
+    version: 1.2.0
     chartconfig:
-      title: $str:Home
-      style:
-        fontWeight: $num:400
-        fontSize: $num:16
+      title: $str:Setup checklist
+      columns:
+        - header: $str:Check
+          type: $str:string
+          values:
+            tableRef:
+              tablename: checks
+              format:
+                value: label
+              queryParams:
+                limit: 50
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+          styling:
+            fontWeight: $str:600
+            width: $str:220px
+        - header: $str:Result
+          type: $str:state
+          values:
+            tableRef:
+              tablename: checks
+              format:
+                value: result
+              queryParams:
+                limit: 50
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+          styling:
+            stateMap: $str:'OK', '#2e9e5b', 'INFO', '#3a7bd5', 'WARNING', '#e0a526', 'PROBLEM', '#d9453d'
+            width: $str:100px
+        - header: $str:Observed
+          type: $str:string
+          values:
+            tableRef:
+              tablename: checks
+              format:
+                value: message
+              queryParams:
+                limit: 50
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+        - header: $str:How to fix
+          type: $str:string
+          values:
+            tableRef:
+              tablename: checks
+              format:
+                value: hint
+              queryParams:
+                limit: 50
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+        - header: $str:Since
+          type: $str:timestamp
+          values:
+            tableRef:
+              tablename: checks
+              format:
+                value: tsp
+              queryParams:
+                limit: 50
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+          styling:
+            timestampFormat: $str:yyyy-MM-dd HH:mm
+            width: $str:140px
+      styling:
+        headerFontSize: $str:14px
+        cellPaddingVertical: $str:4px
+        cellPaddingHorizontal: $str:8px
+      subTitle: '$str:In setup order: fix the first PROBLEM first, each check assumes the ones above it pass'
+  - layout_id: clients-table
+    package_name: widget-table
+    version: 1.2.0
+    chartconfig:
+      title: $str:Clients
+      columns:
+        - header: $str:Client
+          type: $str:string
+          values:
+            tableRef:
+              tablename: clients
+              format:
+                value: name
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+                  - combinator: OR
+                    filters:
+                      - column: deleted
+                        operator: IS NULL
+                        dataType: boolean
+                      - column: deleted
+                        operator: '='
+                        value: false
+                        dataType: boolean
+          styling:
+            fontWeight: $str:600
+        - header: $str:Status
+          type: $str:state
+          values:
+            tableRef:
+              tablename: clients
+              format:
+                value: status
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+                  - combinator: OR
+                    filters:
+                      - column: deleted
+                        operator: IS NULL
+                        dataType: boolean
+                      - column: deleted
+                        operator: '='
+                        value: false
+                        dataType: boolean
+          styling:
+            stateMap: $str:'CONNECTED', '#2e9e5b', 'OFFLINE', '#9e9e9e', 'NEVER_CONNECTED', '#e0a526', 'DISABLED', '#9e9e9e', 'EXPIRED', '#d9453d', 'REMOVED', '#9e9e9e'
+            width: $str:150px
+        - header: $str:VPN address
+          type: $str:string
+          values:
+            tableRef:
+              tablename: clients
+              format:
+                value: ipv4
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+                  - combinator: OR
+                    filters:
+                      - column: deleted
+                        operator: IS NULL
+                        dataType: boolean
+                      - column: deleted
+                        operator: '='
+                        value: false
+                        dataType: boolean
+          styling:
+            width: $str:130px
+        - header: $str:Allowed IPs
+          type: $str:string
+          values:
+            tableRef:
+              tablename: clients
+              format:
+                value: allowed_ips
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+                  - combinator: OR
+                    filters:
+                      - column: deleted
+                        operator: IS NULL
+                        dataType: boolean
+                      - column: deleted
+                        operator: '='
+                        value: false
+                        dataType: boolean
+        - header: $str:Last handshake
+          type: $str:timestamp
+          values:
+            tableRef:
+              tablename: clients
+              format:
+                value: last_handshake
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+                  - combinator: OR
+                    filters:
+                      - column: deleted
+                        operator: IS NULL
+                        dataType: boolean
+                      - column: deleted
+                        operator: '='
+                        value: false
+                        dataType: boolean
+          styling:
+            timestampFormat: $str:yyyy-MM-dd HH:mm
+            width: $str:140px
+        - header: $str:Enabled
+          type: $str:boolean
+          values:
+            tableRef:
+              tablename: clients
+              format:
+                value: enabled
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+                  - combinator: OR
+                    filters:
+                      - column: deleted
+                        operator: IS NULL
+                        dataType: boolean
+                      - column: deleted
+                        operator: '='
+                        value: false
+                        dataType: boolean
+          styling:
+            width: $str:80px
+        - header: $str:Expires
+          type: $str:timestamp
+          values:
+            tableRef:
+              tablename: clients
+              format:
+                value: expires_at
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+                  - combinator: OR
+                    filters:
+                      - column: deleted
+                        operator: IS NULL
+                        dataType: boolean
+                      - column: deleted
+                        operator: '='
+                        value: false
+                        dataType: boolean
+          styling:
+            timestampFormat: $str:yyyy-MM-dd
+            width: $str:110px
+      styling:
+        headerFontSize: $str:14px
+        cellPaddingVertical: $str:4px
+        cellPaddingHorizontal: $str:8px
+      subTitle: $str:CONNECTED = handshake within 3 minutes. Manage clients in the Web UI on the gateway page.
+  - layout_id: events-table
+    package_name: widget-table
+    version: 1.2.0
+    chartconfig:
+      title: $str:Recent events
+      columns:
+        - header: $str:Time
+          type: $str:timestamp
+          values:
+            tableRef:
+              tablename: events
+              format:
+                value: tsp
+              queryParams:
+                limit: 40
+          styling:
+            timestampFormat: $str:yyyy-MM-dd HH:mm
+            width: $str:140px
+        - header: $str:Gateway
+          type: $str:string
+          values:
+            tableRef:
+              tablename: events
+              format:
+                value: devname
+              queryParams:
+                limit: 40
+        - header: $str:Level
+          type: $str:state
+          values:
+            tableRef:
+              tablename: events
+              format:
+                value: level
+              queryParams:
+                limit: 40
+          styling:
+            stateMap: $str:'info', '#3a7bd5', 'warning', '#e0a526', 'error', '#d9453d'
+            width: $str:90px
+        - header: $str:Message
+          type: $str:string
+          values:
+            tableRef:
+              tablename: events
+              format:
+                value: message
+              queryParams:
+                limit: 40
+      styling:
+        headerFontSize: $str:14px
+        cellPaddingVertical: $str:4px
+        cellPaddingHorizontal: $str:8px
+      subTitle: $str:Endpoint changes, repairs, clients connecting (oldest first)
+  - layout_id: gateway-list
+    package_name: widget-sidenav
+    version: 1.0.25
+    chartconfig:
+      title: $str:Gateways
+      route: $str:/gateways/
       navItems:
         tableRef:
-          queryParams:
-            limit: 500
-            filterAnd:
-              - operator: =
-                value: "true"
-                dataType: boolean
-                column: latest_flag
+          tablename: gateways
           format:
-            trailingSlash: null
             label: devname
-            iconName: $str:hard_drive
-            route: devname
-            leadingSlash: null
-            variables: []
-          tablename: devices
-      route: $str:/
-      leadingSlash: null
-      trailingSlash: null
-      variables: []
-    custom_style: null
-  - layout_id: 823116a1-d080-42de-be05-891b23a3df12
-    package_name: widget-embed
-    version: 1.0.8
+            iconName: $str:router
+            route: device_key
+          queryParams:
+            limit: 200
+            filterAnd:
+              - latest: true
+                column: ''
+                operator: '='
+                value: ''
+                dataType: boolean
+  - layout_id: gateway-table
+    package_name: widget-table
+    version: 1.2.0
     chartconfig:
-      webUrl:
+      title: $str:Gateways
+      columns:
+        - header: $str:Gateway
+          type: $str:string
+          values:
+            tableRef:
+              tablename: gateways
+              format:
+                value: devname
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+          styling:
+            fontWeight: $str:600
+        - header: $str:Status
+          type: $str:state
+          values:
+            tableRef:
+              tablename: gateways
+              format:
+                value: status
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+          styling:
+            stateMap: $str:'OK', '#2e9e5b', 'WARNING', '#e0a526', 'PROBLEM', '#d9453d', 'SETUP_PENDING', '#3a7bd5', 'STARTING', '#9e9e9e'
+            width: $str:130px
+        - header: $str:Detail
+          type: $str:string
+          values:
+            tableRef:
+              tablename: gateways
+              format:
+                value: status_detail
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+        - header: $str:VPN endpoint
+          type: $str:string
+          values:
+            tableRef:
+              tablename: gateways
+              format:
+                value: vpn_endpoint
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+        - header: $str:Connected
+          type: $str:number
+          values:
+            tableRef:
+              tablename: gateways
+              format:
+                value: clients_connected
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+          styling:
+            precision: $num:0
+            width: $str:90px
+        - header: $str:Clients
+          type: $str:number
+          values:
+            tableRef:
+              tablename: gateways
+              format:
+                value: clients_total
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+          styling:
+            precision: $num:0
+            width: $str:80px
+        - header: $str:Updated
+          type: $str:timestamp
+          values:
+            tableRef:
+              tablename: gateways
+              format:
+                value: tsp
+              queryParams:
+                limit: 200
+                filterAnd:
+                  - latest: true
+                    column: ''
+                    operator: '='
+                    value: ''
+                    dataType: boolean
+          styling:
+            timestampFormat: $str:yyyy-MM-dd HH:mm
+            width: $str:140px
+      styling:
+        headerFontSize: $str:14px
+        cellPaddingVertical: $str:4px
+        cellPaddingHorizontal: $str:8px
+      subTitle: $str:Current state of every gateway running the app
+  - layout_id: gateway-tabs
+    package_name: widget-navbar
+    version: 1.0.25
+    chartconfig:
+      title:
         valueRef:
-          tablename: devices
-          column: url
+          tablename: gateways
+          column: devname
           queryParams:
             limit: 1
             filterAnd:
-              - value: "1"
-                dataType: string
+              - latest: true
+                column: ''
+                operator: '='
+                value: ''
+                dataType: boolean
+              - column: device_key
+                operator: '='
+                value: '2'
+                dataType: numeric
                 useRoute: true
-                column: devname
-                operator: =
-              - dataType: boolean
-                column: latest_flag
-                operator: =
-                value: "true"
-      title: null
-      multiEmbed: $bool:false
+      route: $str:/gateways/*
+      style:
+        fontSize: $num:15
+        fontWeight: $num:400
+      navItems:
+        - label: $str:Clients
+          iconName: $str:devices
+          route: $str:/gateways/*/clients
+        - label: $str:Traffic
+          iconName: $str:swap_vert
+          route: $str:/gateways/*/traffic
+        - label: $str:Checks
+          iconName: $str:checklist
+          route: $str:/gateways/*/checks
+        - label: $str:Events
+          iconName: $str:history
+          route: $str:/gateways/*/events
     custom_style:
-      tile_border_color: "#fff0"
-  - layout_id: a8a163b5-abd9-4a00-929f-7c16b2ece8a6
+      tile_border_color: transparent
+  - layout_id: gateways-hint
     package_name: widget-markdown
-    version: 1.0.7
+    version: 1.0.17
     chartconfig:
+      markdown: |
+        ## Gateways
+
+        Pick a gateway on the left. Its page embeds the wg-easy admin Web UI where you create clients and download their configs. The tabs above the page show the gateway's **Clients**, **Traffic**, setup **Checks** and **Events**.
+
+        **Status colours:** green OK, amber WARNING (works, but look at the checks), red PROBLEM (the VPN does not work as it should), blue SETUP_PENDING (first-boot setup not finished), grey STARTING.
+
+        The **VPN endpoint** column is what clients connect to. It follows the IronFlock tunnel automatically; when it changes (see Events), clients must download their configs again.
       data: []
-      markdown: |-
-        $str:# ⬆️ Pick a gateway above to set up a VPN ⬆️
+      verticalScroll: $bool:true
+  - layout_id: guide-md
+    package_name: widget-markdown
+    version: 1.0.17
+    chartconfig:
+      markdown: |
+        # WireGuard VPN: setup and diagnosis guide
 
-        ## Secure, Fast, and Easy Remote Access with WireGuard
+        This app packages the open-source [wg-easy](https://github.com/wg-easy/wg-easy) WireGuard server for IronFlock gateways. The IronFlock AI assistant knows everything on this page in more depth: ask it to diagnose a gateway or a client, or how to reach a machine.
 
-        WireGuard is a modern and speedy VPN that uses advanced cryptography. It's designed to be faster than OpenVPN and can be used on embedded interfaces. The WireGuard VPN App is a versatile VPN suitable for a variety of situations such as secure remote access to your edge devices.
+        ## Three places, three jobs
 
-        <p align="center">
-          <img src="https://github.com/wg-easy/wg-easy/raw/master/assets/screenshot.png" width="802" />
-        </p>
-
-        ## Here's what the app offers
-
-        First off, this app is just a packaging of the original great work hosted in this GitHub repository [here](https://github.com/wg-easy/wg-easy). The code for this derived app can be found [here](https://github.com/RecordEvolutionApps/wireguard-easy).
-
-        [![Build & Publish latest Image](https://github.com/wg-easy/wg-easy/actions/workflows/deploy.yml/badge.svg?branch=production)](https://github.com/wg-easy/wg-easy/actions/workflows/deploy.yml)
-        [![Lint](https://github.com/wg-easy/wg-easy/actions/workflows/lint.yml/badge.svg?branch=master)](https://github.com/wg-easy/wg-easy/actions/workflows/lint.yml)
-        [![GitHub Stars](https://img.shields.io/github/stars/wg-easy/wg-easy)](https://github.com/wg-easy/wg-easy/stargazers)
-        [![License](https://img.shields.io/github/license/wg-easy/wg-easy)](LICENSE)
-        [![GitHub Release](https://img.shields.io/github/v/release/wg-easy/wg-easy)](https://github.com/wg-easy/wg-easy/releases/latest)
-        [![Image Pulls](https://img.shields.io/badge/image_pulls-11M-blue)](https://github.com/wg-easy/wg-easy/pkgs/container/wg-easy)
-
-        * **Robust Security:** Our app creates a secure tunnel, shielding your connection from prying eyes on any network, including vulnerable public Wi-Fi hotspots. We employ the latest encryption protocols, including ChaCha20, Poly1305, and Curve25519, to ensure your data remains confidential and your communications private.
-        * **High-Speed Performance:** Experience lightning-fast browsing, streaming, and downloading. WireGuard's streamlined design minimizes overhead, delivering faster performance compared to traditional VPN protocols. This is crucial for applications like remote desktop and file transfers often used in automation.
-        * **Simple Setup:** Our intuitive design and user-friendly interface make it easy to establish a secure connection, which is essential for quickly accessing machines in a fast-paced industrial environment.
-        * **Unrestricted Access:** Bypass geo-restrictions and network limitations to access your favorite content from anywhere in the world. This also enables access to industrial equipment and networks that might be segmented or behind firewalls.
-        * **Privacy Protection:** Our app safeguards your online activity and protects your sensitive information.
-        * **Remote Access for Automation Engineers:** This app is particularly useful for automation engineers needing secure and reliable remote access to shop floor machines.  Program PLCs, download configurations, and perform diagnostics with tools like Codesys and Tia Portal, as if you were on-site.
-
-        **Key Technical Features:**
-
-        * **WireGuard Protocol:** Built on the modern and secure WireGuard VPN protocol.
-        * **Advanced Cryptography:** Utilizes ChaCha20 encryption, Poly1305 authentication, and Curve25519 key exchange.
-        * **Minimal Overhead:** Designed for speed and efficiency, minimizing latency and maximizing throughput. This is critical for real-time control and monitoring of industrial equipment.
-        * **Cross-Platform Compatibility:** Works seamlessly across iOS, Android, macOS, Windows, and Linux. This allows engineers to use their preferred devices, whether in the office or on the go.
-        * **Open Source:** Our code is publicly available for review and audit.
-
-        With our WireGuard-powered app, you get uncompromising security and blazing-fast performance.
-
-        ## Requirements
-
-        An Edge Device running Linux (amd64 or arm64) with a kernel that supports WireGuard (all modern kernels). Note: wg-easy v15 no longer supports 32-bit ARM (armv6/armv7).
+        | Place | What you do there |
+        | - | - |
+        | App parameters (device or group settings) | First-boot settings: admin login, DNS, default Allowed IPs, VPN subnet |
+        | wg-easy Web UI (the gateway's page on this board) | Clients: create, download configs, enable, expire, delete; interface settings |
+        | This board | Status of every gateway, setup checklist, client connection state, traffic, events |
 
         ## First login
 
-        On the first start the admin account is created automatically from the Admin Username / Admin Password parameters below, so the setup wizard is skipped and you can log straight in. Change the default password right after your first login.
+        On the first start the admin account is created from the **Admin Username** / **Admin Password** parameters (password at least 12 characters, or the first login fails). Change the password right after the first login; the parameter cannot change it afterwards.
 
         ## Options
 
-        These options can be configured in the parameters of the app. All values below are applied only on the first start (while the database is still empty) — change them afterwards in the Web UI. Exception: **Allowed IPs clients will use** is re-applied whenever you change the parameter; it then affects newly created clients only (existing clients keep their own value — edit or recreate them in the Web UI).
+        All values are applied on the first start only (while the database is still empty); change them afterwards in the Web UI. Exception: **Allowed IPs clients will use** is re-applied whenever you change the parameter and then affects newly created clients only.
 
         | Parameter | Default | Description |
-        | - | - |  - |
+        | - | - | - |
         | Admin Username | `admin` | Initial admin username (min. 2 characters). |
         | Admin Password | `wireguard1234` | Initial admin password (min. 12 characters). Change it after the first login. |
         | DNS Server clients will use | `1.1.1.1` | DNS server(s) handed to clients, comma-separated. |
-        | Allowed IPs clients will use | `0.0.0.0/0, ::/0` | Allowed IPs for clients, comma-separated. |
+        | Allowed IPs clients will use | `0.0.0.0/0, ::/0` | Allowed IPs for new clients, comma-separated. |
+        | VPN IPv4 subnet | `10.8.0.0/24` | Subnet of the VPN; change it only when your network already uses 10.8.0.x. |
+        | VPN IPv6 subnet | `fdcc:ad94:bacf:61a4::cafe:0/112` | IPv6 subnet of the VPN (unused while IPv6 is disabled). |
         | Disable IPv6 | `true` | Disable IPv6 support on the server. |
+        | Allow insecure HTTP access | `false` | Allow login over plain HTTP (LAN access without the tunnel). |
 
-        Other WireGuard settings (MTU, persistent keep-alive, client IP range, and the pre/post-up & down hooks) are no longer environment variables in v15 — they are managed in the Web UI.
+        ## Reach a PLC while keeping normal internet (split tunnel)
 
-        ## Typical use case: reach a PLC while keeping normal internet access (split tunnel)
+        A client's **Allowed IPs** (Web UI, client settings) decide what the laptop sends through the VPN. `0.0.0.0/0, ::/0` is a full tunnel: everything, including web browsing, goes through the plant. For a split tunnel set the VPN subnet plus the machines, e.g. `10.8.0.0/24, 192.168.0.123/32` for one PLC or `10.8.0.0/24, 192.168.0.0/24` for the whole machine network. Then **re-download the client config**; the setting is baked into it.
 
-        The most common setup: this app runs on a gateway that shares a local network with a PLC (or another machine), and you want to use tools like TIA Portal or Codesys from your laptop through the VPN — while your browser and other applications keep using your normal internet connection.
+        * Prefer `/32` entries per machine: if your office network is also 192.168.0.x, a `/24` entry hijacks your local traffic.
+        * Connect to the PLC by **IP address**. TIA Portal's "Accessible devices" and Codesys scans use broadcasts that do not cross a routed VPN.
+        * No change on the PLC: VPN traffic is masqueraded to the gateway's own LAN address. If the gateway's LAN interface is not `eth0`, change the interface device in the Web UI.
 
-        That is a *split tunnel*, and you configure it per client in the WireGuard Web UI. The client's **Allowed IPs** become the `AllowedIPs` line of its downloaded config and tell your laptop which destinations are routed through the VPN — everything else stays on your normal connection.
+        ## When something does not work
 
-        1. Open the Web UI and create (or edit) the client for your laptop.
-        2. Set the client's **Allowed IPs** to the addresses that should go through the VPN. IP ranges are written in CIDR notation:
-           * a single device ends in `/32`, e.g. `192.168.0.123/32` for the PLC at 192.168.0.123
-           * a whole network uses a shorter suffix, e.g. `192.168.0.0/24` for all of 192.168.0.x
-           * always include the VPN's own subnet `10.8.0.0/24` (the default of this app)
+        1. Open the gateway's **Checks** tab. Checks are ordered as a setup walk-through: fix the first PROBLEM first, then the WARNINGs.
+        2. **No handshake?** Check the tunnel is active (Checks), that the client's config carries the current endpoint (Events: `endpoint_changed` means re-download), and that the client's network allows outbound UDP (test from a mobile hotspot).
+        3. **Connected but nothing reachable?** Ping the gateway's VPN address (`10.8.0.1`); if that fails the client's Allowed IPs lack the VPN subnet. If a machine fails, its address is not in the Allowed IPs, or the gateway cannot route to it.
+        4. **Lost clients after a restart?** The check *Database persists on /data* must be OK.
+        5. Ask the AI assistant: *"Diagnose gateway X"*, *"Why does client Y not connect?"*, *"Will client Y reach 192.168.0.123?"*.
 
-           Example for one PLC: `10.8.0.0/24, 192.168.0.123/32`
-        3. Download the client config on the laptop and connect. The setting is baked into the downloaded file — **re-download after every change**.
+        ## Requirements
 
-        Traffic to those addresses now goes through the VPN; your browser and every other application keep using the laptop's normal internet connection. With `0.0.0.0/0, ::/0` as Allowed IPs you get a *full* tunnel instead: **all** laptop traffic — including web browsing — travels through the plant gateway.
-
-        Notes:
-
-        * Prefer narrow `/32` entries: if your home or office network uses the same range as the machine network (e.g. both `192.168.0.x`), a whole-subnet route conflicts with your local network.
-        * Connect to the PLC by its **IP address**. TIA Portal's "Accessible devices" scan (PROFINET DCP) uses Layer-2 broadcasts, which do not cross a routed VPN.
-        * No changes are needed on the PLC: VPN traffic is masqueraded to the gateway's own LAN address. (If your gateway's LAN interface is not `eth0`, adjust the interface device in the Web UI.)
-        * The app parameter *Allowed IPs clients will use* only sets the **default** for newly created clients.
-
-        ## License
-
-        This project is licensed under the AGPL-3.0-only License - see the [LICENSE](LICENSE) file for details
-
-        This project is not affiliated, associated, authorized, endorsed by, or in any way officially connected with Jason A. Donenfeld, ZX2C4 or Edge Security
-
-        "WireGuard" and the "WireGuard" logo are registered trademarks of Jason A. Donenfeld
+        A Linux edge device (amd64 or arm64) with a kernel that supports WireGuard. wg-easy v15 does not support 32-bit ARM.
+      data: []
+      verticalScroll: $bool:true
+  - layout_id: gw-embed
+    package_name: widget-embed
+    version: 1.0.13
+    chartconfig:
+      webUrl:
+        valueRef:
+          tablename: gateways
+          column: web_url
+          queryParams:
+            limit: 1
+            filterAnd:
+              - latest: true
+                column: ''
+                operator: '='
+                value: ''
+                dataType: boolean
+              - column: device_key
+                operator: '='
+                value: '2'
+                dataType: numeric
+                useRoute: true
+      multiEmbed: $bool:false
     custom_style:
-      tile_border_color: "#fff0"
+      tile_border_color: transparent
+  - layout_id: gw-events-table
+    package_name: widget-table
+    version: 1.2.0
+    chartconfig:
+      title: $str:Events
+      columns:
+        - header: $str:Time
+          type: $str:timestamp
+          values:
+            tableRef:
+              tablename: events
+              format:
+                value: tsp
+              queryParams:
+                limit: 100
+                filterAnd:
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+          styling:
+            timestampFormat: $str:yyyy-MM-dd HH:mm
+            width: $str:140px
+        - header: $str:Level
+          type: $str:state
+          values:
+            tableRef:
+              tablename: events
+              format:
+                value: level
+              queryParams:
+                limit: 100
+                filterAnd:
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+          styling:
+            stateMap: $str:'info', '#3a7bd5', 'warning', '#e0a526', 'error', '#d9453d'
+            width: $str:90px
+        - header: $str:Kind
+          type: $str:string
+          values:
+            tableRef:
+              tablename: events
+              format:
+                value: kind
+              queryParams:
+                limit: 100
+                filterAnd:
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+          styling:
+            width: $str:170px
+        - header: $str:Message
+          type: $str:string
+          values:
+            tableRef:
+              tablename: events
+              format:
+                value: message
+              queryParams:
+                limit: 100
+                filterAnd:
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+      styling:
+        headerFontSize: $str:14px
+        cellPaddingVertical: $str:4px
+        cellPaddingHorizontal: $str:8px
+      subTitle: $str:What the app did and observed on this gateway (oldest first)
+  - layout_id: home-intro
+    package_name: widget-markdown
+    version: 1.0.17
+    chartconfig:
+      markdown: |
+        ## Secure remote access to your machines
+
+        Each gateway runs a WireGuard VPN server. Connect your laptop or phone with the WireGuard app and reach the PLCs, HMIs and servers on the network behind the gateway, as if you were on site.
+
+        **How to get going**
+
+        1. Pick a gateway in **Gateways**. Its page embeds the admin Web UI; log in with the Admin Username and Admin Password from the app parameters and change the password.
+        2. Create a client with **+**, download its config or scan the QR code on the phone, activate the tunnel.
+        3. Watch the client turn **CONNECTED** on the gateway's **Clients** tab.
+
+        **Something not working?** Open the gateway's **Checks** tab: every check says what it found and how to fix it, in setup order. Or ask the IronFlock AI assistant, for example *"Why can't my laptop reach 192.168.0.123 through gateway Line-1?"*. It runs the same checks, reads the logs and knows the guides.
+
+        Read the **Guide** for split tunnels (reach a PLC while keeping your normal internet), parameters and troubleshooting.
+      data: []
+      verticalScroll: $bool:true
+  - layout_id: kpi-connected
+    package_name: widget-value
+    version: 1.1.38
+    chartconfig:
+      title: $str:VPN clients
+      dataseries:
+        - label: $str:connected now
+          unit: '$str:'
+          precision: $num:0
+          value:
+            valueRef:
+              tablename: fleet_summary
+              column: clients_connected
+              queryParams:
+                limit: 1
+          styling:
+            valueColor: $str:#2e9e5b
+        - label: $str:enabled
+          unit: '$str:'
+          precision: $num:0
+          value:
+            valueRef:
+              tablename: fleet_summary
+              column: clients_enabled
+              queryParams:
+                limit: 1
+  - layout_id: kpi-gateways
+    package_name: widget-value
+    version: 1.1.38
+    chartconfig:
+      title: $str:Gateways
+      dataseries:
+        - label: $str:reporting
+          unit: '$str:'
+          precision: $num:0
+          value:
+            valueRef:
+              tablename: fleet_summary
+              column: gateways
+              queryParams:
+                limit: 1
+        - label: $str:need attention
+          unit: '$str:'
+          precision: $num:0
+          value:
+            valueRef:
+              tablename: fleet_summary
+              column: gateways_attention
+              queryParams:
+                limit: 1
+          styling:
+            valueColor: $str:#e0a526
+  - layout_id: nav
+    package_name: widget-navbar
+    version: 1.0.25
+    chartconfig:
+      title: $str:WireGuard VPN
+      route: $str:/
+      style:
+        fontSize: $num:16
+        fontWeight: $num:400
+      navItems:
+        - label: $str:Gateways
+          iconName: $str:router
+          route: $str:/gateways/
+        - label: $str:Guide
+          iconName: $str:menu_book
+          route: $str:/guide
+    custom_style:
+      tile_border_color: transparent
+  - layout_id: traffic-chart
+    package_name: widget-linechart
+    version: 1.7.15
+    chartconfig:
+      title: $str:Traffic per client
+      subTitle: $str:Last 24 hours, 5-minute averages. Idle clients produce no data.
+      axis:
+        timeseries: $bool:true
+        yAxisLabel: $str:kB/s
+        showLegend: $bool:true
+      dataseries:
+        - label: $str:From client
+          type: $str:line
+          data:
+            tableRef:
+              tablename: traffic
+              format:
+                x: tsp
+                y: rx_kbs
+                pivot: client_name
+              queryParams:
+                limit: 3000
+                filterAnd:
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+                windowPeriod: hour
+                windowLength: 24
+                nowMinusPeriods: 0
+                series:
+                  method: AVG
+                  bucket:
+                    length: 5
+                    period: minute
+        - label: $str:To client
+          type: $str:line
+          styling:
+            borderDash: $str:dashed
+          data:
+            tableRef:
+              tablename: traffic
+              format:
+                x: tsp
+                y: tx_kbs
+                pivot: client_name
+              queryParams:
+                limit: 3000
+                filterAnd:
+                  - column: device_key
+                    operator: '='
+                    value: '2'
+                    dataType: numeric
+                    useRoute: true
+                windowPeriod: hour
+                windowLength: 24
+                nowMinusPeriods: 0
+                series:
+                  method: AVG
+                  bucket:
+                    length: 5
+                    period: minute
 layout:
-  groups: []
   gridLayout:
-    - w: 96
-      h: 5
-      id: 697259b7-429a-40ba-83ff-c30fd64af85e
-      z: 999
-      fixedHeight: true
+    - id: nav
       x: 0
       y: 0
-    - w: 96
-      h: 59
-      id: a8a163b5-abd9-4a00-929f-7c16b2ece8a6
+      w: 96
+      h: 5
+      fixedHeight: true
+      z: 1000
+    - id: gateway-table
       x: 0
-      z: 1001
       y: 5
+      w: 64
+      h: 30
+      z: 1001
+    - id: kpi-gateways
+      x: 64
+      y: 5
+      w: 16
+      h: 15
+      z: 1002
+    - id: kpi-connected
+      x: 80
+      y: 5
+      w: 16
+      h: 15
+      z: 1003
+    - id: events-table
+      x: 64
+      y: 20
+      w: 32
+      h: 44
+      z: 1004
+    - id: home-intro
+      x: 0
+      y: 35
+      w: 64
+      h: 29
+      z: 1005
   subRoutes:
-    "*":
+    gateways:
       gridLayout:
-        - y: 0
+        - id: nav
+          x: 0
+          y: 0
           w: 96
           h: 5
-          id: 697259b7-429a-40ba-83ff-c30fd64af85e
-          x: 0
-          z: 1000
           fixedHeight: true
-        - y: 5
+          z: 1000
+        - id: gateway-list
+          x: 0
+          y: 5
+          w: 16
+          h: 59
+          fixedWidth: true
+          z: 1001
+        - id: gateway-table
+          x: 16
+          y: 5
+          w: 80
+          h: 30
+          z: 1002
+        - id: gateways-hint
+          x: 16
+          y: 35
+          w: 80
+          h: 29
+          z: 1003
+      subRoutes:
+        '*':
+          gridLayout:
+            - id: nav
+              x: 0
+              y: 0
+              w: 96
+              h: 5
+              fixedHeight: true
+              z: 1000
+            - id: gateway-list
+              x: 0
+              y: 5
+              w: 16
+              h: 59
+              fixedWidth: true
+              z: 1001
+            - id: gateway-tabs
+              x: 16
+              y: 5
+              w: 80
+              h: 5
+              fixedHeight: true
+              z: 1002
+            - id: gw-embed
+              x: 16
+              y: 10
+              w: 80
+              h: 54
+              z: 1003
+          subRoutes:
+            clients:
+              gridLayout:
+                - id: nav
+                  x: 0
+                  y: 0
+                  w: 96
+                  h: 5
+                  fixedHeight: true
+                - id: gateway-list
+                  x: 0
+                  y: 5
+                  w: 16
+                  h: 59
+                  fixedWidth: true
+                - id: gateway-tabs
+                  x: 16
+                  y: 5
+                  w: 80
+                  h: 5
+                  fixedHeight: true
+                - id: clients-table
+                  x: 16
+                  y: 10
+                  w: 80
+                  h: 54
+            traffic:
+              gridLayout:
+                - id: nav
+                  x: 0
+                  y: 0
+                  w: 96
+                  h: 5
+                  fixedHeight: true
+                - id: gateway-list
+                  x: 0
+                  y: 5
+                  w: 16
+                  h: 59
+                  fixedWidth: true
+                - id: gateway-tabs
+                  x: 16
+                  y: 5
+                  w: 80
+                  h: 5
+                  fixedHeight: true
+                - id: traffic-chart
+                  x: 16
+                  y: 10
+                  w: 80
+                  h: 54
+            checks:
+              gridLayout:
+                - id: nav
+                  x: 0
+                  y: 0
+                  w: 96
+                  h: 5
+                  fixedHeight: true
+                - id: gateway-list
+                  x: 0
+                  y: 5
+                  w: 16
+                  h: 59
+                  fixedWidth: true
+                - id: gateway-tabs
+                  x: 16
+                  y: 5
+                  w: 80
+                  h: 5
+                  fixedHeight: true
+                - id: checks-table
+                  x: 16
+                  y: 10
+                  w: 80
+                  h: 54
+            events:
+              gridLayout:
+                - id: nav
+                  x: 0
+                  y: 0
+                  w: 96
+                  h: 5
+                  fixedHeight: true
+                - id: gateway-list
+                  x: 0
+                  y: 5
+                  w: 16
+                  h: 59
+                  fixedWidth: true
+                - id: gateway-tabs
+                  x: 16
+                  y: 5
+                  w: 80
+                  h: 5
+                  fixedHeight: true
+                - id: gw-events-table
+                  x: 16
+                  y: 10
+                  w: 80
+                  h: 54
+          groups: []
+      groups: []
+    guide:
+      gridLayout:
+        - id: nav
+          x: 0
+          y: 0
+          w: 96
+          h: 5
+          fixedHeight: true
+        - id: guide-md
+          x: 0
+          y: 5
           w: 96
           h: 59
-          id: 823116a1-d080-42de-be05-891b23a3df12
-          x: 0
-          z: 1001
-      groups: []
+  groups: []
 style:
   theme:
     theme_name: roma
-  background_color: "#0000"
-  text_color: "#333"
-  tile_background_color: "#0000"
-  tile_border_color: "#ccc"
+  background_color: '#0000'
+  text_color: '#333'
+  tile_background_color: '#0000'
+  tile_border_color: '#ccc'
+  columns: 96
+  rows: 64

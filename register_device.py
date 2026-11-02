@@ -1,212 +1,303 @@
 """IronFlock companion process for wg-easy.
 
-Started in the background by entrypoint.sh and owns all platform integration:
+Started in the background by entrypoint.sh and running for the container's
+lifetime next to the unmodified wg-easy server. It owns all platform
+integration; wg-easy itself knows nothing about IronFlock.
 
-1. Publishes this device's web UI url to the IronFlock `devices` table once the
-   WAMP connection joins the router (feeds the dashboard embed defined in
-   .ironflock/board-template.yml).
-2. Keeps the client-facing VPN endpoint (the "Endpoint = host:port" line in
-   downloaded client configs) in sync with the tunnel. wg-easy stores host/port
-   in user_configs_table and reads them from SQLite on EVERY config download, but
-   only applies INIT_* on the very first boot — while the device agent
-   activates/deactivates tunnels and rewrites the /data/env/*.txt files in
-   RUNNING containers without a restart. The sync loop therefore polls the
-   SDK-computed endpoint and rewrites the DB row whenever it changes.
-3. Re-applies the "Allowed IPs clients will use" parameter (INIT_ALLOWED_IPS)
-   when its value changes: wg-easy honours INIT_* only on the very first boot,
-   but the app parameters are the natural config surface on IronFlock. Only
-   the default for newly created clients is updated (sync_allowed_ips_once).
+Two independent loops:
 
-The endpoint sync deliberately does NOT depend on the WAMP connection — it must
-keep working when the router is unreachable (e.g. restrictive corporate
-networks where only the tunnel itself gets out).
+1. Endpoint sync (every 10 s, needs NO platform connection): keeps wg-easy's
+   advertised client Endpoint equal to the tunnel's public UDP endpoint and
+   re-applies the Allowed-IPs parameter (endpoint_sync.py). It must keep
+   working when the router is unreachable, e.g. in corporate networks where
+   only the tunnel itself gets out.
+2. State publishing (every 30 s, once connected): collects the gateway's
+   state (vpn_state.py) and writes it to the app's tables on change:
+   `gateways` (this device's row), `clients` (one row per VPN client),
+   `checks` (the setup checklist), `traffic` (per-minute transfer rates) and
+   `events` (what happened). The board and the AI assistant read them.
+
+Once the connection is up, the VPN diagnostics tools and the knowledge
+library are registered as device functions for the AI assistant
+(ai_tools.py). The SDK restores them after every reconnect.
 """
 
 import asyncio
-import json
+import collections
 import os
-import sqlite3
-from datetime import datetime
-from urllib.parse import urlsplit
+import signal
+import sys
+import time
+import traceback
 
-from ironflock import IronFlock
+# Printed before the heavy imports so the container log shows whether the
+# companion started at all, even when an import below fails.
+print(f"[ironflock] companion starting (python {sys.version.split()[0]})", flush=True)
+try:
+    from ironflock import IronFlock
 
-ironflock: IronFlock  # assigned in __main__; used by the functions below after assignment
+    import ai_tools
+    import endpoint_sync
+    import vpn_state
+except Exception:
+    print("[ironflock] companion failed to import its modules:\n" + traceback.format_exc(), flush=True)
+    raise
 
-# Physical location of wg-easy's DB: the server opens /etc/wireguard/wg-easy.db,
-# which entrypoint.sh symlinks onto the persistent /data volume.
-DB_PATH = "/data/wg-easy.db"
-WEB_UI_PORT = 51821  # must match port-template.yml
-VPN_PORT = 51820  # must match port-template.yml (the wg ListenPort — enforced in the DB)
-SYNC_INTERVAL_SECONDS = 10  # the agent updates /data/env within seconds of a tunnel toggle
-# Last INIT_ALLOWED_IPS value this app applied to the DB (see sync_allowed_ips_once)
-ALLOWED_IPS_STATE = "/data/.ironflock_applied_allowed_ips"
+SYNC_INTERVAL = 10  # s; the agent updates /data/env within seconds of a tunnel toggle
+STATE_INTERVAL = 30  # s between state snapshots
+TRAFFIC_INTERVAL = 60  # s between traffic samples
+HANDSHAKE_REFRESH = 600  # s; re-publish a connected client's row at least this often
+STARTUP_GRACE = 90  # s to wait for wg-easy (Web UI and wg interface) before the first state row
+PRODUCTION = os.environ.get("ENV", "").upper() == "PROD"
 
+GATEWAY_COLUMNS = (
+    "status", "status_detail", "wg_easy_version", "interface_up", "listen_port", "setup_done",
+    "db_persisted", "ip_forward", "nat_masquerade", "tunnel_active", "vpn_host", "vpn_port",
+    "vpn_endpoint", "ipv4_cidr", "lan_device", "mtu", "default_allowed_ips", "default_dns",
+    "clients_total", "clients_enabled", "clients_connected",
+)
+CLIENT_COLUMNS = (
+    "client_id", "name", "enabled", "ipv4", "ipv6", "allowed_ips", "uses_default_allowed_ips",
+    "expires_at", "status", "connected", "last_handshake", "rx_bytes", "tx_bytes", "public_key", "deleted",
+)
+# the part of a client row whose change is worth a new row (counters are not)
+CLIENT_STATE = ("name", "enabled", "ipv4", "ipv6", "allowed_ips", "uses_default_allowed_ips", "expires_at", "status")
 
-def get_vpn_endpoint():
-    """Current public VPN endpoint as (host, port), or None while the tunnel is inactive.
-
-    The SDK composes it from the device identity, TUNNEL_DOMAIN and the
-    tunnel-assigned public UDP port (WG_PORT / WG_PORT_CLOUD on instance
-    devices), reading the live agent-maintained files under /data/env.
-    """
-    url = ironflock.getRemoteAccessUrlForPort(
-        VPN_PORT, protocol="udp", remote_port_environment="WG_PORT"
-    )
-    if not url:
-        return None
-    parts = urlsplit(url)
-    if not (parts.hostname and parts.port):
-        return None
-    return parts.hostname, parts.port
-
-
-def sync_endpoint_once():
-    """Keep wg-easy's stored endpoint in line with the tunnel's current one.
-
-    This takes ownership of the interface Host/Port — do not edit them in the
-    Admin UI for this app. user_configs_table.host/port (the advertised client
-    endpoint) follow the tunnel, and interfaces_table.port (the wg ListenPort)
-    is enforced back to 51820 because the tunnel always forwards the public
-    port there. Writes are single short UPDATEs: wg-easy's own connection runs
-    with busy_timeout=0, so holding locks longer would make its requests fail.
-    """
-    if not os.path.exists(DB_PATH):
-        return  # first boot — wg-easy has not created its database yet
-    endpoint = get_vpn_endpoint()  # None while the tunnel is inactive
-    # mode=rw so a race on the check above can never create an empty DB file
-    con = sqlite3.connect(f"file:{DB_PATH}?mode=rw", uri=True, timeout=5)
-    try:
-        setup = con.execute("SELECT setup_step FROM general_table").fetchone()
-        if setup is None or setup[0] != 0:
-            return  # first-boot setup still running (setup_step != 0) — don't race its writes
-        # Repair installs whose first boot seeded the public tunnel port as the wg
-        # ListenPort (an older entrypoint passed WG_PORT as INIT_PORT, and wg-easy's
-        # setup writes INIT_PORT into interfaces_table.port too). wg re-reads it on
-        # the next container restart; the DB must be fixed for that restart to heal.
-        cur = con.execute(
-            "UPDATE interfaces_table SET port = ? WHERE port != ?", (VPN_PORT, VPN_PORT)
-        )
-        if cur.rowcount:
-            con.commit()
-            print(f"endpoint sync: repaired wg ListenPort to {VPN_PORT} (applies on next restart)")
-        if endpoint is None:
-            return  # tunnel inactive — keep the last known advertised endpoint
-        host, port = endpoint
-        row = con.execute("SELECT host, port FROM user_configs_table").fetchone()
-        if row is None:
-            return  # schema exists but the config row is not seeded yet
-        if (row[0], row[1]) == (host, port):
-            return
-        con.execute("UPDATE user_configs_table SET host = ?, port = ?", (host, port))
-        con.commit()
-        print(f"endpoint sync: client Endpoint set to {host}:{port} (was {row[0]}:{row[1]})")
-    finally:
-        con.close()
+flock: IronFlock  # assigned in __main__
+events: collections.deque = collections.deque(maxlen=500)
+refresh_now: asyncio.Event
 
 
-def sync_allowed_ips_once():
-    """Apply an INIT_ALLOWED_IPS parameter *change* to the default Allowed IPs.
-
-    wg-easy honours INIT_* only on the very first boot, but for IronFlock users
-    the app parameters are the natural config surface. Semantics: last writer
-    wins — the parameter is (re)applied only when it differs from the value
-    recorded as last applied (state file on /data), so Web UI edits persist
-    until the parameter is changed again. This updates only the DEFAULT used
-    for newly created clients; existing clients keep their own copy (wg-easy
-    copies the default into each client at creation) and are edited/recreated
-    in the Web UI.
-
-    Returns True once handled (applied, or nothing to do) so the caller can
-    stop retrying for this container run; False while the DB is not ready.
-    """
-    param = os.environ.get("INIT_ALLOWED_IPS", "")
-    wanted = [x.strip() for x in param.split(",") if x.strip()]
-    if not wanted:
-        return True  # parameter unset/empty — nothing to manage
-    try:
-        with open(ALLOWED_IPS_STATE) as f:
-            last_applied = f.read().strip()
-    except OSError:
-        last_applied = None
-    if last_applied == param:
-        return True  # unchanged since last applied — the Web UI owns the value
-    if not os.path.exists(DB_PATH):
-        return False  # first boot — wg-easy applies INIT_ALLOWED_IPS itself there
-    con = sqlite3.connect(f"file:{DB_PATH}?mode=rw", uri=True, timeout=5)
-    try:
-        setup = con.execute("SELECT setup_step FROM general_table").fetchone()
-        if setup is None or setup[0] != 0:
-            return False  # first-boot setup still running — don't race its writes
-        # stored as a JSON string array, e.g. '["0.0.0.0/0","::/0"]'
-        wanted_json = json.dumps(wanted, separators=(",", ":"))
-        cur = con.execute(
-            "UPDATE user_configs_table SET default_allowed_ips = ? WHERE default_allowed_ips != ?",
-            (wanted_json, wanted_json),
-        )
-        con.commit()
-        if cur.rowcount:
-            print(
-                f"allowed-ips sync: default Allowed IPs set to {', '.join(wanted)} "
-                "(affects newly created clients; existing clients keep their own value)"
-            )
-    finally:
-        con.close()
-    with open(ALLOWED_IPS_STATE, "w") as f:
-        f.write(param)
-    return True
+def log(message: str) -> None:
+    print(f"[ironflock] {message}", flush=True)
 
 
-async def endpoint_sync_loop():
-    print(
-        f"endpoint sync: keeping {DB_PATH} in sync with the tunnel endpoint "
-        f"(checking every {SYNC_INTERVAL_SECONDS}s)"
-    )
+def queue_event(level: str, kind: str, message: str, **detail) -> None:
+    log(f"event {kind}: {message}")
+    events.append({"tsp": vpn_state.now_iso(), "level": level, "kind": kind, "message": message, "detail": detail or None})
+
+
+# --- loop 1: endpoint sync, independent of the platform connection ----------
+
+
+def resync_endpoint() -> list[dict]:
+    """One sync pass; used by the loop and by the AI tool."""
+    return endpoint_sync.sync_endpoint_once(endpoint_sync.get_vpn_endpoint(flock))
+
+
+async def endpoint_sync_loop() -> None:
+    log(f"endpoint sync: keeping {vpn_state.DB_PATH} in step with the tunnel (every {SYNC_INTERVAL}s)")
     allowed_ips_done = False
     while True:
         try:
-            await asyncio.to_thread(sync_endpoint_once)
+            changed = await asyncio.to_thread(resync_endpoint)
             if not allowed_ips_done:
-                allowed_ips_done = await asyncio.to_thread(sync_allowed_ips_once)
-        except Exception as exc:  # locked DB, missing table, ... — retry next tick
-            print(f"endpoint sync: skipped ({exc})")
-        await asyncio.sleep(SYNC_INTERVAL_SECONDS)
+                allowed_ips_done, more = await asyncio.to_thread(endpoint_sync.sync_allowed_ips_once)
+                changed += more
+            for e in changed:
+                queue_event(e["level"], e["kind"], e["message"], **e["detail"])
+            if changed:
+                refresh_now.set()
+        except Exception as exc:  # locked DB, missing table, ... retry next tick
+            log(f"endpoint sync: skipped ({exc})")
+        await asyncio.sleep(SYNC_INTERVAL)
 
 
-async def register_device():
-    # runs once after the connection joins the router
-    print("########### Storing Device info ################")
-    url = ironflock.getRemoteAccessUrlForPort(WEB_UI_PORT)
-    if not url:
-        print("WARNING: could not compose the web UI url (device identity env missing?) — not publishing")
-        return
-    await ironflock.append_to_table(
-        "devices",
-        {
-            "tsp": datetime.now().astimezone().isoformat(),
-            "url": url,
-            "state": 1,
-        },
-    )
-    print("done")
-    # returning lets run_async() close the WAMP connection cleanly — the sync loop lives on
+# --- loop 2: state publishing ----------------------------------------------
 
 
-async def run_wamp():
+class Publisher:
+    """Writes state rows on change and remembers what was written."""
+
+    def __init__(self):
+        self.gateway = None
+        self.clients: dict[int, dict] = {}
+        self.client_published_at: dict[int, float] = {}
+        self.checks: dict[str, dict] = {}
+        self.traffic: dict[int, tuple[float, int, int]] = {}
+        self.last_traffic = 0.0
+        self.web_url = None
+        self.primed = False  # True after the first complete tick: changes become events
+
+    async def flush_events(self) -> None:
+        while events:
+            row = events[0]
+            try:
+                await flock.append_to_table("events", row)
+            except RuntimeError as exc:
+                log(f"events: not recorded yet ({exc})")
+                return
+            events.popleft()
+
+    async def publish_gateway(self, snap: dict) -> None:
+        row = {k: snap.get(k) for k in GATEWAY_COLUMNS}
+        # Published in development runs too: they have their own HTTPS tunnel (label suffix -dev).
+        web_url = endpoint_sync.get_web_ui_url(flock)
+        row["web_url"] = web_url
+        if row == self.gateway:
+            return
+        if self.gateway is not None and row["status"] != self.gateway["status"]:
+            level = "info" if row["status"] == "OK" else "warning"
+            queue_event(level, "status_changed", f"gateway status {self.gateway['status']} -> {row['status']}: {row['status_detail']}")
+        await flock.append_to_table("gateways", {"tsp": snap["tsp"], **row})
+        log(f"state: gateway row published (status {row['status']}: {row['status_detail']})")
+        self.gateway = row
+        if web_url != self.web_url:
+            log(f"web UI url: {web_url or 'unknown (DEVICE_KEY or APP_NAME missing)'}")
+            self.web_url = web_url
+
+    async def publish_clients(self, snap: dict, now: float) -> None:
+        current = {c["client_id"]: c for c in snap["clients"]}
+        for cid, c in current.items():
+            previous = self.clients.get(cid)
+            state = {k: c[k] for k in CLIENT_STATE}
+            stale = c["connected"] and now - self.client_published_at.get(cid, 0) > HANDSHAKE_REFRESH
+            if previous is not None and state == previous and not stale:
+                continue
+            if previous is None and self.primed:
+                queue_event("info", "client_added", f"client '{c['name']}' created ({c['ipv4']})", client_id=cid)
+            elif previous is not None and previous["status"] != c["status"]:
+                if c["status"] == "CONNECTED":
+                    queue_event("info", "client_connected", f"client '{c['name']}' connected", client_id=cid)
+                elif previous["status"] == "CONNECTED":
+                    queue_event("info", "client_disconnected", f"client '{c['name']}' disconnected ({c['status'].lower()})", client_id=cid)
+                else:
+                    queue_event("info", "client_changed", f"client '{c['name']}' is now {c['status'].lower()}", client_id=cid)
+            await flock.append_to_table("clients", {"tsp": snap["tsp"], **{k: c[k] for k in CLIENT_COLUMNS}})
+            self.clients[cid] = state
+            self.client_published_at[cid] = now
+        for cid in list(self.clients):
+            if cid in current:
+                continue
+            previous = self.clients.pop(cid)
+            self.client_published_at.pop(cid, None)
+            self.traffic.pop(cid, None)
+            queue_event("info", "client_removed", f"client '{previous['name']}' removed", client_id=cid)
+            await flock.append_to_table(
+                "clients",
+                {"tsp": snap["tsp"], "client_id": cid, "name": previous["name"], "status": "REMOVED",
+                 "connected": False, "enabled": False, "deleted": True},
+            )
+
+    async def publish_checks(self, snap: dict) -> None:
+        current = {c["check_id"]: c for c in snap["checks"]}
+        for check_id, c in current.items():
+            if self.checks.get(check_id) == c:
+                continue
+            await flock.append_to_table("checks", {"tsp": snap["tsp"], **c})
+            self.checks[check_id] = c
+        for check_id in list(self.checks):
+            if check_id in current:
+                continue
+            cleared = {**self.checks.pop(check_id), "result": vpn_state.OK, "message": "cleared", "hint": ""}
+            await flock.append_to_table("checks", {"tsp": snap["tsp"], **cleared})
+
+    async def publish_traffic(self, snap: dict, now: float) -> None:
+        if now - self.last_traffic < TRAFFIC_INTERVAL:
+            return
+        rows = []
+        for c in snap["clients"]:
+            cid, rx, tx = c["client_id"], c["rx_bytes"], c["tx_bytes"]
+            previous = self.traffic.get(cid)
+            self.traffic[cid] = (now, rx, tx)
+            if previous is None:
+                continue
+            t0, rx0, tx0 = previous
+            if (rx, tx) == (rx0, tx0):
+                continue  # idle client: no row
+            dt = max(now - t0, 1.0)
+            # counters reset when the interface restarts: a negative delta is a restart
+            rx_rate = max(rx - rx0, 0) / dt / 1000
+            tx_rate = max(tx - tx0, 0) / dt / 1000
+            rows.append({"tsp": snap["tsp"], "client_id": cid, "client_name": c["name"], "rx_bytes": rx,
+                         "tx_bytes": tx, "rx_kbs": round(rx_rate, 3), "tx_kbs": round(tx_rate, 3)})
+        self.last_traffic = now
+        if rows:
+            await flock.publish_rows_to_table("traffic", rows)
+
+
+def wg_easy_up() -> bool:
+    return vpn_state.web_ui_listening() and vpn_state.wg_dump() is not None
+
+
+async def wait_for_wg_easy() -> None:
+    """Hold back the first state row until wg-easy has started, so a restart
+    does not publish a transient PROBLEM (interface down, Web UI not answering)
+    with its status_changed event. Gives up after STARTUP_GRACE seconds, e.g.
+    on a gateway whose setup is unfinished, and publishes whatever is true."""
+    deadline = time.monotonic() + STARTUP_GRACE
+    while time.monotonic() < deadline:
+        if await asyncio.to_thread(wg_easy_up):
+            return
+        await asyncio.sleep(2)
+    log(f"state: wg-easy not fully up after {STARTUP_GRACE}s; publishing the state as it is")
+
+
+async def state_loop(publisher: Publisher) -> None:
+    await wait_for_wg_easy()
+    while True:
+        refresh_now.clear()
+        now = time.time()
+        try:
+            snap = await asyncio.to_thread(vpn_state.collect, endpoint_sync.get_vpn_endpoint(flock))
+            await publisher.publish_gateway(snap)
+            await publisher.publish_checks(snap)
+            await publisher.publish_clients(snap, now)
+            await publisher.publish_traffic(snap, now)
+            await publisher.flush_events()
+            publisher.primed = True
+        except RuntimeError as exc:  # platform unreachable for the reconnect window: retry next tick
+            log(f"state: not recorded ({exc})")
+            if "no_such_procedure" in str(exc):
+                log(
+                    "state: the data backend serves no such table yet. The tables of data-template.yml "
+                    "are created by 'Update Data Structure' in the Cloud IDE (development runs) or by "
+                    "installing a release; the app retries every tick"
+                )
+        except Exception as exc:
+            log(f"state: failed ({exc!r})")
+        try:
+            await asyncio.wait_for(refresh_now.wait(), timeout=STATE_INTERVAL)
+        except asyncio.TimeoutError:
+            pass
+
+
+# --- main ---------------------------------------------------------------------
+
+
+async def main() -> None:
+    """Runs once the connection is up. It must never return: returning would
+    close the connection and with it every registered device function."""
+    log("connected to the IronFlock router")
+    tools = ai_tools.VpnTools(flock, lambda: endpoint_sync.get_vpn_endpoint(flock), resync_endpoint)
+    await ai_tools.register_all(flock, tools, log)
+    queue_event("info", "startup", f"gateway companion started (wg-easy {vpn_state.WG_EASY_VERSION})",
+                production=PRODUCTION)
+    await state_loop(Publisher())
+
+
+async def run() -> None:
+    global refresh_now
+    refresh_now = asyncio.Event()
+    sync_task = asyncio.create_task(endpoint_sync_loop())
     try:
-        await ironflock.run_async()
+        await flock.run_async()  # connects (retrying forever), runs main(), never returns
     except Exception as exc:
-        print(f"device registration: router connection failed ({exc}) — endpoint sync continues")
-
-
-async def main():
-    wamp_task = asyncio.create_task(run_wamp())
-    try:
-        await endpoint_sync_loop()  # runs forever
+        log(f"platform connection ended ({exc}); endpoint sync continues")
+        await sync_task  # keep the VPN endpoint correct even without the platform
     finally:
-        wamp_task.cancel()
+        sync_task.cancel()
 
 
 if __name__ == "__main__":
-    ironflock = IronFlock(mainFunc=register_device)
-    asyncio.run(main())
+    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
+    try:
+        flock = IronFlock(mainFunc=main)
+        asyncio.run(run())
+    except SystemExit:
+        raise
+    except BaseException:
+        # stdout on purpose: some log views show only stdout, and a silent
+        # death here would leave the VPN endpoint unsynced without a trace.
+        print("[ironflock] companion crashed:\n" + traceback.format_exc(), flush=True)
+        raise
