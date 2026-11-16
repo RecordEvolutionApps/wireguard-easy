@@ -107,7 +107,8 @@ all clients.
 
 ## Forwarding and NAT
 The entrypoint enables `net.ipv4.ip_forward` and `src_valid_mark` in the
-container's network namespace (the container runs privileged). wg-easy's
+container's network namespace (the container runs privileged: the app
+declares it, and users grant it at install). wg-easy's
 PostUp hook installs an iptables MASQUERADE rule from the VPN subnet to the
 gateway's LAN interface (default `eth0`). With that, a machine on the LAN sees
 VPN traffic as coming from the gateway's own address and needs no route back
@@ -120,13 +121,13 @@ container lifetime and:
 
 1. run the endpoint sync described above, independently of the platform
    connection, so a gateway in a restrictive network keeps a correct endpoint;
-2. register the gateway at start in the table `gateways` (its device key as
+2. register the gateway at start in the table `gateway_registry` (its device key as
    `device_id`, its name and its Web UI URL), which also brings back a
    gateway that was removed on the board;
 3. apply the default Allowed IPs saved on the board, as described above;
 4. every 30 s collect the gateway's state from the database, `wg show`, the
    kernel and the local Web UI port, and write what changed to the tables
-   `gateways`, `clients`, `checks`, `events`, plus `traffic` every minute;
+   `gateway_registry`, `vpn_clients`, `gateway_checks`, `events`, plus `traffic` every minute;
 5. register the AI assistant's tools on the device: status, clients,
    diagnose, route check, endpoint re-sync and this knowledge library.
 

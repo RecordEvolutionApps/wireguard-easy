@@ -65,15 +65,18 @@ it when technicians must reach one machine and nothing else.
 - The companion process only reads WireGuard state, writes the advertised
   Endpoint and the default Allowed IPs, and publishes state to the app's
   tables. It never publishes private keys, pre-shared keys or passwords.
-  Client public keys appear in the `clients` table because `wg show` shows
+  Client public keys appear in the `vpn_clients` table because `wg show` shows
   them; they are identifiers, not secrets.
-- The Web UI URL in the `gateways` table is the private HTTPS tunnel URL;
+- The Web UI URL in the `gateway_registry` table is the private HTTPS tunnel URL;
   opening it still requires an IronFlock login and the wg-easy login.
 - The AI assistant's tools are read-only, except "re-sync endpoint", which
   rewrites the advertised Host/Port to the tunnel's current values. The
   assistant cannot create, change or delete clients.
 - The container runs privileged (needed for the WireGuard interface and the
-  sysctls); the app's own code does not use that for anything else.
+  sysctls); the app declares it in its data template, users grant it when
+  installing or updating the app and can revoke it in the app's project
+  settings (the VPN then cannot start). The app's own code does not use it for
+  anything else.
 
 ## Updates
 The app pins a specific wg-easy release and is updated through IronFlock's

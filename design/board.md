@@ -10,8 +10,9 @@ header carries the short version; both change together.
 - **What they look for first:** whether every gateway's VPN works, and if not,
   which one and why; then who is connected right now.
 - **What they change on the board:** the default Allowed IPs of a gateway (its
-  Settings tab), and removing a gateway or a client that is gone. Clients are
-  created and changed in the embedded wg-easy Web UI.
+  Settings tab), and removing a gateway that is gone. Clients are created,
+  changed and deleted in the embedded wg-easy Web UI only; the board shows
+  their stats.
 - **Look:** that of the wg-easy Web UI (v15, Tailwind), which the board embeds
   on every gateway page, so the two read as one app: a light `gray-50`
   (`#f9fafb`) page, white tiles with a soft shadow and an 8px radius
@@ -42,8 +43,8 @@ header carries the short version; both change together.
 | `/gateway/<device_id>/checks` | its checklist | the setup checklist with hints | none |
 | `/gateway/<device_id>/events` | its events | what the app did and observed | none |
 | `/gateway/<device_id>/settings` | its settings | the default Allowed IPs form, the saved settings | Save; "Remove gateway" |
-| `/client` | Clients | all clients on all gateways: the list and the table | none |
-| `/client/<client_key>` | Client | its state card, its gateway, its traffic and events | "Remove from list" |
+| `/client` | Client stats | all clients on all gateways: the list and the table | none |
+| `/client/<client_key>` | Client | a button to its gateway, its state card, its traffic and events | none |
 | `/guide` | Guide | setup, split tunnel, troubleshooting | none |
 
 Route segments: gateway and client `'2'`. Gateways are the project's devices,
@@ -56,7 +57,7 @@ keyed by `<device_id>-<client_id>`, which is unique across gateways.
   leads home, its items are Gateways (`/gateway/`), Clients (`/client/`) and
   Guide (`/guide`).
 - `/gateway` and every page below it: a data-driven widget-sidenav of the
-  gateways (`gateways`, `{latest: true}`, filter on `deleted`, route
+  gateways (`gateway_registry`, `{latest: true}`, filter on `deleted`, route
   `device_id`). On a gateway's pages a widget-navbar is the tab bar: its title
   is the gateway's name and leads to `/gateway/<device_id>`; its items are
   Clients, Traffic, Checks, Events and Settings.
@@ -64,9 +65,10 @@ keyed by `<device_id>-<client_id>`, which is unique across gateways.
   each opening `/client/<client_key>` (pattern 3).
 - `/client` and `/client/<client_key>`: a data-driven widget-sidenav of all
   clients (label `display_name`, "name · gateway"). On a client's page a
-  widget-navbar shows the client's name and one item, its gateway, which opens
-  `/gateway/<device_id>`.
-- All menus pin widget-navbar and widget-sidenav 1.0.27.
+  widget-navbutton (the gateway's name, router icon) opens
+  `/gateway/<device_id>`: a tab bar with a single item would only be a link.
+- All menus pin widget-navbar and widget-sidenav 1.0.27, the button
+  widget-navbutton 1.0.20.
 
 ## Pages (96 × 64 grid)
 
@@ -83,9 +85,9 @@ keyed by `<device_id>-<client_id>`, which is unique across gateways.
 - **Settings tab:** the settings form (prefilled with the default in force on
   the gateway), the saved settings, and the "Remove gateway" explanation with
   its red button.
-- **Clients:** the client list and the table of all clients.
-- **Client:** the tab bar with its gateway; the state card with "Remove from
-  list" below it; its traffic chart and its events beside it.
+- **Client stats:** the client list and the table of all clients.
+- **Client:** the button to its gateway at the top; the state card; its
+  traffic chart and its events beside it.
 - **Guide:** one markdown page.
 
 A widget-toast on every page shows what the gateways report with

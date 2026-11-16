@@ -6,9 +6,22 @@
 # Each gateway writes its own rows from the companion process
 # (register_device.py). The board writes gateway_settings (what users decide
 # per gateway) and, as the only exception to one writer per table, the
-# deleted flag of a gateway or a client that is gone. Clients, keys and the
+# deleted flag of a gateway that is gone. Clients, keys and the
 # other VPN settings live in wg-easy and are changed in its Web UI.
+#
+# gateways, clients and checks at the end are the history of app versions
+# before 2026-11-16, kept unchanged: IronFlock cannot change an existing
+# table's entity key, so the re-keyed tables are gateway_registry,
+# vpn_clients and gateway_checks (design/decisions.md).
 ############################################################
+# wg-quick creates the WireGuard interface (ip link add ... type wireguard)
+# and the entrypoint sets the forwarding sysctls: both need CAP_NET_ADMIN.
+# Without this declaration the container runs with Docker's defaults, and
+# wg-easy exits at start with "RTNETLINK answers: Operation not permitted".
+privileged:
+  reason: >-
+    Creates the WireGuard network interface and enables IP forwarding and NAT
+    for VPN clients; both need network administration rights on the device.
 data:
   description: >-
     WireGuard VPN gateways (wg-easy) running on edge devices. Entities and their
@@ -19,7 +32,7 @@ data:
     device_id and, when about a client, its client_key. Direction naming
     follows the gateway: rx = received from a client, tx = sent to a client.
   tables:
-    - tablename: gateways
+    - tablename: gateway_registry
       description: >-
         Entity table, one entity per gateway (device_id): its current state.
         Written by the gateway itself (register_device.py): at start a
@@ -29,7 +42,7 @@ data:
         that is gone; nothing removes a gateway automatically, and one that
         starts the app again reappears. Read it with the latest filter and
         deleted not true. status is OK, WARNING, PROBLEM, SETUP_PENDING or
-        STARTING and summarizes the checks table.
+        STARTING and summarizes gateway_checks.
       chunkTimeInterval: 1 month
       maintainLatestFlagFor: [device_id]
       columnstore: false
@@ -145,7 +158,7 @@ data:
         the gateway. Written by the board's settings form on the gateway's
         Settings page. The gateway named by device_id follows the table
         (subscribe, then the newest row) and applies a row newer than the one
-        it applied last; the result shows in gateways.default_allowed_ips and as
+        it applied last; the result shows in gateway_registry.default_allowed_ips and as
         an allowed_ips_applied or settings_rejected event.
       chunkTimeInterval: 1 year
       maintainLatestFlagFor: [device_id]
@@ -157,14 +170,14 @@ data:
           dataType: timestamp
         - id: device_id
           name: Gateway id
-          description: The gateway these settings are for (gateways.device_id).
+          description: The gateway these settings are for (gateway_registry.device_id).
           dataType: numeric
         - id: default_allowed_ips
           name: Default Allowed IPs
           description: Comma-separated Allowed IPs that newly created clients get, e.g. "10.8.0.0/24, 192.168.0.10/32" (split tunnel) or "0.0.0.0/0, ::/0" (full tunnel). Existing clients keep their own.
           dataType: string
 
-    - tablename: clients
+    - tablename: vpn_clients
       description: >-
         Entity table, one entity per VPN client (client_key,
         "<device_id>-<client_id>"), with its configuration from wg-easy and its
@@ -172,9 +185,10 @@ data:
         first row per run of the app with deleted = false, then a row with the
         columns that changed when the client is created, changed, connects or
         disconnects, and at least every 10 minutes while connected; deleted =
-        true and status REMOVED once it was deleted in the Web UI. The board's
-        "Remove from list" form writes deleted = true for a client whose
-        gateway is gone. Read it with the latest filter and deleted not true.
+        true and status REMOVED once it was deleted in the Web UI (checked
+        once per run for clients deleted while the app was not running).
+        Nothing else writes it. Read it with the latest filter and deleted not
+        true.
       chunkTimeInterval: 1 month
       maintainLatestFlagFor: [client_key]
       columnstore: false
@@ -189,7 +203,7 @@ data:
           dataType: string
         - id: device_id
           name: Gateway id
-          description: The gateway the client is configured on (gateways.device_id).
+          description: The gateway the client is configured on (gateway_registry.device_id).
           dataType: numeric
         - id: device_name
           name: Gateway
@@ -257,10 +271,10 @@ data:
           dataType: string
         - id: deleted
           name: Removed
-          description: True once the client was deleted in the Web UI, or removed from the lists on the board; filter these out in lists.
+          description: True once the client was deleted in the Web UI; filter these out in lists.
           dataType: boolean
 
-    - tablename: checks
+    - tablename: gateway_checks
       description: >-
         Entity table, one entity per check per gateway (device_id, check_id):
         the gateway's setup checklist, written by the gateway when a check's
@@ -277,7 +291,7 @@ data:
           dataType: timestamp
         - id: device_id
           name: Gateway id
-          description: The gateway the check ran on (gateways.device_id).
+          description: The gateway the check ran on (gateway_registry.device_id).
           dataType: numeric
         - id: check_id
           name: Check id
@@ -319,7 +333,7 @@ data:
           dataType: timestamp
         - id: device_id
           name: Gateway id
-          description: The gateway that took the sample (gateways.device_id).
+          description: The gateway that took the sample (gateway_registry.device_id).
           dataType: numeric
         - id: device_name
           name: Gateway
@@ -328,7 +342,7 @@ data:
           dataType: string
         - id: client_key
           name: Client key
-          description: The client (clients.client_key).
+          description: The client (vpn_clients.client_key).
           dataType: string
         - id: client_id
           name: Client id
@@ -372,7 +386,7 @@ data:
           dataType: timestamp
         - id: device_id
           name: Gateway id
-          description: The gateway the event happened on (gateways.device_id).
+          description: The gateway the event happened on (gateway_registry.device_id).
           dataType: numeric
         - id: device_name
           name: Gateway
@@ -381,7 +395,7 @@ data:
           dataType: string
         - id: client_key
           name: Client key
-          description: The client the event is about (clients.client_key); empty for gateway events.
+          description: The client the event is about (vpn_clients.client_key); empty for gateway events.
           dataType: string
         - id: level
           name: Level
@@ -400,6 +414,231 @@ data:
           description: Structured details of the event (e.g. the new endpoint, the client id).
           dataType: json
 
+    - tablename: gateways
+      description: >-
+        History of app versions before 2026-11-16, kept unchanged: IronFlock
+        cannot change an existing table's entity key, so the re-keyed table is
+        gateway_registry. Nothing writes or reads this table any more.
+      chunkTimeInterval: 1 month
+      maintainLatestFlagFor: [device_key]
+      columnstore: false
+      columns:
+        - id: tsp
+          name: Timestamp
+          description: When this state was observed.
+          dataType: timestamp
+        - id: devname
+          name: Gateway
+          description: Name of the gateway device in IronFlock.
+          path: kwargs.DEVICE_NAME
+          dataType: string
+        - id: status
+          name: Status
+          description: "Overall state: OK (all checks pass), WARNING (something to look at, VPN works), PROBLEM (VPN does not work as it should), SETUP_PENDING (first-boot setup not finished), STARTING (database not created yet)."
+          dataType: string
+        - id: status_detail
+          name: Status detail
+          description: Short reason for the status, e.g. the failing checks or the connected client count.
+          dataType: string
+        - id: web_url
+          name: Web UI URL
+          description: HTTPS remote-access URL of the wg-easy admin Web UI (port 51821) through the IronFlock tunnel, in development runs and production installs alike.
+          dataType: string
+        - id: vpn_endpoint
+          name: VPN endpoint
+          description: "Public endpoint clients connect to, host:port, as the tunnel currently assigns it. Empty while the VPN tunnel is inactive."
+          dataType: string
+        - id: vpn_host
+          name: VPN host
+          description: Host part of the VPN endpoint (the tunnel domain).
+          dataType: string
+        - id: vpn_port
+          name: VPN public port
+          description: Public UDP port the tunnel forwards to WireGuard's ListenPort 51820 in the container.
+          dataType: numeric
+        - id: tunnel_active
+          name: Tunnel active
+          description: True when the device has a public UDP port assigned for the VPN; false means no client can connect.
+          dataType: boolean
+        - id: interface_up
+          name: Interface up
+          description: True when the WireGuard interface (wg0) exists in the kernel.
+          dataType: boolean
+        - id: listen_port
+          name: ListenPort
+          description: UDP port WireGuard listens on inside the container; must be 51820, the port the tunnel forwards to.
+          dataType: numeric
+        - id: setup_done
+          name: Setup done
+          description: True once wg-easy's first-boot setup created the admin account.
+          dataType: boolean
+        - id: db_persisted
+          name: Database persisted
+          description: True when /etc/wireguard is linked to the persistent /data volume, so clients survive restarts.
+          dataType: boolean
+        - id: ip_forward
+          name: IP forwarding
+          description: True when net.ipv4.ip_forward is enabled; without it clients connect but reach nothing.
+          dataType: boolean
+        - id: nat_masquerade
+          name: NAT masquerade
+          description: True when the MASQUERADE rule for the VPN subnet is installed; null when iptables could not be queried.
+          dataType: boolean
+        - id: wg_easy_version
+          name: wg-easy version
+          description: Version of the bundled upstream wg-easy server.
+          dataType: string
+        - id: ipv4_cidr
+          name: VPN subnet
+          description: IPv4 subnet of the VPN (default 10.8.0.0/24); clients get addresses from it.
+          dataType: string
+        - id: lan_device
+          name: LAN interface
+          description: Network interface of the gateway that VPN traffic is masqueraded to (default eth0).
+          dataType: string
+        - id: mtu
+          name: MTU
+          description: MTU of the WireGuard interface (default 1420).
+          dataType: numeric
+        - id: default_allowed_ips
+          name: Default Allowed IPs
+          description: Comma-separated Allowed IPs new clients get (the routes a client sends through the VPN). 0.0.0.0/0 means full tunnel.
+          dataType: string
+        - id: default_dns
+          name: Default DNS
+          description: Comma-separated DNS servers handed to new clients.
+          dataType: string
+        - id: clients_total
+          name: Clients
+          description: Number of configured clients.
+          dataType: numeric
+        - id: clients_enabled
+          name: Enabled clients
+          description: Number of enabled clients.
+          dataType: numeric
+        - id: clients_connected
+          name: Connected clients
+          description: Number of clients with a handshake in the last 3 minutes.
+          dataType: numeric
+
+    - tablename: clients
+      description: >-
+        History of app versions before 2026-11-16, kept unchanged: IronFlock
+        cannot change an existing table's entity key, so the re-keyed table is
+        vpn_clients. Nothing writes or reads this table any more.
+      chunkTimeInterval: 1 month
+      maintainLatestFlagFor: [device_key, client_id]
+      columnstore: false
+      columns:
+        - id: tsp
+          name: Timestamp
+          description: When this client state was observed.
+          dataType: timestamp
+        - id: devname
+          name: Gateway
+          description: Name of the gateway device in IronFlock.
+          path: kwargs.DEVICE_NAME
+          dataType: string
+        - id: client_id
+          name: Client id
+          description: wg-easy's id of the client on this gateway (entity key together with device_key).
+          dataType: numeric
+        - id: name
+          name: Client
+          description: Client name as given in the Web UI.
+          dataType: string
+        - id: status
+          name: Status
+          description: "CONNECTED (handshake within 3 min), OFFLINE (connected before, no recent handshake), NEVER_CONNECTED (no handshake since the interface came up), DISABLED, EXPIRED or REMOVED."
+          dataType: string
+        - id: enabled
+          name: Enabled
+          description: False when the client is switched off in the Web UI.
+          dataType: boolean
+        - id: connected
+          name: Connected
+          description: True when the last handshake is at most 3 minutes old.
+          dataType: boolean
+        - id: ipv4
+          name: VPN IPv4
+          description: The client's address inside the VPN subnet.
+          dataType: string
+        - id: ipv6
+          name: VPN IPv6
+          description: The client's IPv6 address inside the VPN (unused when IPv6 is disabled).
+          dataType: string
+        - id: allowed_ips
+          name: Allowed IPs
+          description: Comma-separated destinations the client routes through the VPN (the AllowedIPs line of its config). 0.0.0.0/0 is a full tunnel; a split tunnel lists the VPN subnet plus machine addresses.
+          dataType: string
+        - id: uses_default_allowed_ips
+          name: Uses default Allowed IPs
+          description: True when the client has no Allowed IPs of its own and follows the gateway's default.
+          dataType: boolean
+        - id: expires_at
+          name: Expires
+          description: Expiry date set in the Web UI; empty when the client does not expire.
+          dataType: timestamp
+        - id: last_handshake
+          name: Last handshake
+          description: Time of the last WireGuard handshake with this client; empty if none since the interface came up.
+          dataType: timestamp
+        - id: rx_bytes
+          name: Received bytes
+          description: Bytes the gateway received from the client since the interface came up (the client's upload).
+          dataType: bigint
+        - id: tx_bytes
+          name: Sent bytes
+          description: Bytes the gateway sent to the client since the interface came up (the client's download).
+          dataType: bigint
+        - id: public_key
+          name: Public key
+          description: The client's WireGuard public key, as shown by wg show.
+          dataType: string
+        - id: deleted
+          name: Removed
+          description: True once the client was removed in the Web UI; filter these out in lists.
+          dataType: boolean
+
+    - tablename: checks
+      description: >-
+        History of app versions before 2026-11-16, kept unchanged: IronFlock
+        cannot change an existing table's entity key, so the re-keyed table is
+        gateway_checks. Nothing writes or reads this table any more.
+      chunkTimeInterval: 1 month
+      maintainLatestFlagFor: [device_key, check_id]
+      columnstore: false
+      columns:
+        - id: tsp
+          name: Timestamp
+          description: When this result was observed.
+          dataType: timestamp
+        - id: devname
+          name: Gateway
+          description: Name of the gateway device in IronFlock.
+          path: kwargs.DEVICE_NAME
+          dataType: string
+        - id: check_id
+          name: Check id
+          description: "Stable id of the check: db_persisted, database, setup_done, interface_up, listen_port, tunnel_active, endpoint_synced, ip_forward, nat_masquerade, web_ui, default_allowed_ips, clients, expired_clients, never_connected."
+          dataType: string
+        - id: label
+          name: Check
+          description: Human-readable name of the check.
+          dataType: string
+        - id: result
+          name: Result
+          description: "OK, INFO (nothing to do), WARNING (works, but look at it) or PROBLEM (the VPN does not work as it should)."
+          dataType: string
+        - id: message
+          name: Message
+          description: What was observed.
+          dataType: string
+        - id: hint
+          name: How to fix
+          description: What to do when the result is not OK; empty otherwise.
+          dataType: string
+
   transforms:
     - tablename: fleet_summary
       description: >-
@@ -414,7 +653,7 @@ data:
       sql: >-
         WITH current AS (
           SELECT DISTINCT ON (device_id) status, clients_connected, clients_enabled, deleted
-          FROM gateways
+          FROM gateway_registry
           WHERE device_id IS NOT NULL
           ORDER BY device_id, tsp DESC
         )

@@ -311,7 +311,7 @@ def collect(endpoint: tuple[str, int] | None) -> dict:
         f"WireGuard interface {INTERFACE}",
         OK if dump else (WARNING if not setup_done else PROBLEM),
         f"up, ListenPort {dump['listen_port']}" if dump else "not up",
-        None if dump else "wg-easy brings the interface up after setup. If setup is complete, read the container logs: the host kernel needs WireGuard support and the app must run privileged.",
+        None if dump else "wg-easy brings the interface up after setup. If setup is complete, read the container logs: \"Operation not permitted\" means the app's privileged access was not granted (project settings); otherwise the host kernel lacks WireGuard support.",
     )
 
     iface = (db or {}).get("interface") or {}
@@ -356,7 +356,7 @@ def collect(endpoint: tuple[str, int] | None) -> dict:
         "IPv4 forwarding",
         OK if ip_forward == "1" else PROBLEM,
         f"net.ipv4.ip_forward = {ip_forward}",
-        None if ip_forward == "1" else "Clients connect but cannot reach anything. The entrypoint enables it; the container must run privileged.",
+        None if ip_forward == "1" else "Clients connect but cannot reach anything. The entrypoint enables it; the container must run privileged (grant the app's privileged access in its project settings).",
     )
 
     masq = nat_masquerade(iface.get("ipv4_cidr")) if dump else None

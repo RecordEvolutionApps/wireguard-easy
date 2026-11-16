@@ -14,12 +14,12 @@ Two independent loops:
    in corporate networks where only the tunnel itself gets out.
 2. State publishing (every 30 s, once connected): collects the gateway's
    state (vpn_state.py) and writes what changed to the app's tables:
-   `gateways` (this gateway's row), `clients` (one row per VPN client),
-   `checks` (the setup checklist), `traffic` (per-minute transfer rates) and
+   `gateway_registry` (this gateway's row), `vpn_clients` (one row per VPN
+   client), `gateway_checks` (the setup checklist), `traffic` (per-minute transfer rates) and
    `events` (what happened). The board and the AI assistant read them.
 
 Board-written state this gateway follows: `gateway_settings` (its default
-Allowed IPs), and `gateways` rows with deleted = true (a gateway removed on
+Allowed IPs), and `gateway_registry` rows with deleted = true (a gateway removed on
 the board), after which it refreshes the fleet_summary transform.
 
 Once the connection is up, the VPN diagnostics tools and the knowledge
@@ -56,13 +56,19 @@ HANDSHAKE_REFRESH = 600  # s; re-publish a connected client's row at least this 
 STARTUP_GRACE = 90  # s to wait for wg-easy (Web UI and wg interface) before the first state row
 REGISTER_RETRY = 30  # s between attempts to write the registration row
 PRODUCTION = os.environ.get("ENV", "").upper() == "PROD"
-# The key of this gateway in the gateways table. The platform's device_key
+# The key of this gateway in GATEWAY_TABLE. The platform's device_key
 # column cannot serve: it is stamped from the writer, and the board's delete
 # row has no device. 0 only outside IronFlock, where nothing is published.
 DEVICE_ID = int(os.environ.get("DEVICE_KEY") or 0)
 DEVICE_NAME = os.environ.get("DEVICE_NAME") or f"device {DEVICE_ID}"
 SETTINGS_STATE = "/data/.ironflock_settings_tsp"  # tsp (epoch ms) of the settings row applied last
 FLEET_SUMMARY = "fleet_summary"
+# The entity tables. Not "gateways", "clients" and "checks": those hold the
+# history of app versions before 2026-11-16, keyed by the platform's
+# device_key, and IronFlock cannot change an existing table's entity key.
+GATEWAY_TABLE = "gateway_registry"
+CLIENT_TABLE = "vpn_clients"
+CHECK_TABLE = "gateway_checks"
 
 GATEWAY_COLUMNS = (
     "status", "status_detail", "wg_easy_version", "interface_up", "listen_port", "setup_done",
@@ -85,6 +91,11 @@ sync_now: asyncio.Event  # wakes the endpoint sync loop
 
 def log(message: str) -> None:
     print(f"[ironflock] {message}", flush=True)
+
+
+def db_read(snap: dict) -> bool:
+    """True when this snapshot read wg-easy's database, the source of its client list."""
+    return any(c["check_id"] == "database" and c["result"] == vpn_state.OK for c in snap["checks"])
 
 
 def client_key(client_id: int) -> str:
@@ -205,7 +216,7 @@ async def on_settings(row, *args, **kwargs) -> None:
 
 
 async def on_gateway_row(row, *args, **kwargs) -> None:
-    """A gateways row from any gateway or from the board. deleted = true comes
+    """A GATEWAY_TABLE row from any gateway or from the board. deleted = true comes
     only from the board's "Remove gateway"; the home figures drop it now."""
     if isinstance(row, dict) and row.get("deleted") is True:
         await refresh_fleet_summary()
@@ -255,13 +266,14 @@ class Publisher:
     carries the other columns over from the entity's previous row."""
 
     def __init__(self):
-        self.gateway: dict | None = None  # columns written to gateways since the registration
+        self.gateway: dict | None = None  # columns written to GATEWAY_TABLE since the registration
         self.clients: dict[int, dict] = {}  # client_id -> columns written
         self.client_published_at: dict[int, float] = {}
         self.checks: dict[str, dict] = {}
         self.traffic: dict[int, tuple[float, int, int]] = {}
         self.last_traffic = 0.0
         self.primed = False  # True after the first complete tick: changes become events
+        self.reconciled = False  # True once the clients the tables list were checked against wg-easy
 
     async def register(self) -> None:
         """This gateway's registration row. deleted = false brings back a
@@ -275,7 +287,7 @@ class Publisher:
         }
         while True:
             try:
-                await flock.append_to_table("gateways", row)
+                await flock.append_to_table(GATEWAY_TABLE, row)
                 break
             except RuntimeError as exc:
                 log(f"registration: not recorded yet ({exc}); retrying in {REGISTER_RETRY}s")
@@ -304,13 +316,17 @@ class Publisher:
         if previous is not None and "status" in changed:
             level = "info" if full["status"] == "OK" else "warning"
             queue_event(level, "status_changed", f"gateway status {previous} -> {full['status']}: {full['status_detail']}")
-        await flock.append_to_table("gateways", {"tsp": snap["tsp"], "device_id": DEVICE_ID, **changed})
+        await flock.append_to_table(GATEWAY_TABLE, {"tsp": snap["tsp"], "device_id": DEVICE_ID, **changed})
         if "status" in changed or "status_detail" in changed:
             log(f"state: gateway status {full['status']}: {full['status_detail']}")
         self.gateway = {**(self.gateway or {}), **changed}
         return True
 
     async def publish_clients(self, snap: dict, now: float) -> None:
+        if not db_read(snap):
+            # The client list comes from wg-easy's database: without it every
+            # client would look deleted. Try again next tick.
+            return
         current = {c["client_id"]: c for c in snap["clients"]}
         for cid, c in current.items():
             key = client_key(cid)
@@ -334,7 +350,7 @@ class Publisher:
                 row = {"client_key": key, "device_id": DEVICE_ID, "device_name": DEVICE_NAME, "deleted": False, **full}
             else:
                 row = {"client_key": key, **changed_columns(full, previous)}
-            await flock.append_to_table("clients", {"tsp": snap["tsp"], **row})
+            await flock.append_to_table(CLIENT_TABLE, {"tsp": snap["tsp"], **row})
             self.clients[cid] = full
             self.client_published_at[cid] = now
         for cid in list(self.clients):
@@ -343,7 +359,7 @@ class Publisher:
             previous = self.clients[cid]
             key = client_key(cid)
             await flock.append_to_table(
-                "clients",
+                CLIENT_TABLE,
                 {"tsp": snap["tsp"], "client_key": key, "status": "REMOVED",
                  "connected": False, "enabled": False, "deleted": True},
             )
@@ -351,6 +367,41 @@ class Publisher:
             del self.clients[cid]
             self.client_published_at.pop(cid, None)
             self.traffic.pop(cid, None)
+        await self.reconcile_clients({client_key(cid) for cid in current}, snap["tsp"])
+
+    async def reconcile_clients(self, current_keys: set[str], tsp: str) -> None:
+        """Once per run: a client deleted in the Web UI while this companion was
+        not running never got its REMOVED row, so the tables would list it
+        forever. Read the clients the tables list for this gateway and close
+        those wg-easy no longer has. Clients are only ever deleted in wg-easy;
+        the gateway is the one writer of their rows."""
+        if self.reconciled:
+            return
+        query = {
+            "limit": 3000,
+            "filterAnd": [
+                {"latest": True},
+                {"column": "device_id", "operator": "=", "value": DEVICE_ID, "dataType": "numeric"},
+            ],
+        }
+        try:
+            rows = await flock.getHistory(CLIENT_TABLE, query)
+        except Exception as exc:
+            log(f"clients: reading the listed clients failed ({exc}); retrying next tick")
+            return
+        for row in rows or []:
+            key = row.get("client_key") if isinstance(row, dict) else None
+            if not key or key in current_keys or row.get("deleted") is True:
+                continue
+            await flock.append_to_table(
+                CLIENT_TABLE,
+                {"tsp": tsp, "client_key": key, "status": "REMOVED",
+                 "connected": False, "enabled": False, "deleted": True},
+            )
+            queue_event("info", "client_removed",
+                        f"client '{row.get('name') or key}' removed (deleted while the app was not running)",
+                        client=key)
+        self.reconciled = True
 
     async def publish_checks(self, snap: dict) -> None:
         current = {c["check_id"]: c for c in snap["checks"]}
@@ -358,13 +409,13 @@ class Publisher:
             changed = changed_columns(c, self.checks.get(check_id))
             if not changed:
                 continue
-            await flock.append_to_table("checks", {"tsp": snap["tsp"], "device_id": DEVICE_ID, "check_id": check_id, **changed})
+            await flock.append_to_table(CHECK_TABLE, {"tsp": snap["tsp"], "device_id": DEVICE_ID, "check_id": check_id, **changed})
             self.checks[check_id] = c
         for check_id in list(self.checks):
             if check_id in current:
                 continue
             await flock.append_to_table(
-                "checks",
+                CHECK_TABLE,
                 {"tsp": snap["tsp"], "device_id": DEVICE_ID, "check_id": check_id,
                  "result": vpn_state.OK, "message": "cleared", "hint": ""},
             )
@@ -471,7 +522,7 @@ async def follow_board() -> None:
     """Follow what the board writes: subscribe first, so no row falls between
     the read and the subscription, then read the newest settings row."""
     await flock.subscribe_to_table("gateway_settings", on_settings)
-    await flock.subscribe_to_table("gateways", on_gateway_row)
+    await flock.subscribe_to_table(GATEWAY_TABLE, on_gateway_row)
     await read_saved_settings()
 
 

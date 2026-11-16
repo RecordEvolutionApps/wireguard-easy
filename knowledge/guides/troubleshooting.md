@@ -26,9 +26,9 @@ diagnose a gateway or a client.
 | STARTING for more than a minute | wg-easy did not create its database | Read the container logs in IronFlock; the `wg-easy startup config` banner at the top shows the effective settings |
 | SETUP_PENDING | First-boot setup did not finish, usually a password shorter than 12 characters or a username shorter than 2 | Open the Web UI: it shows the setup wizard, which you can complete by hand. Or fix the parameters and reinstall the app (this deletes `/data`) |
 | Database persists on /data = PROBLEM | `/etc/wireguard` is not linked to `/data` | Restart the app; if it persists, the device's `/data` volume is missing. Clients created now would be lost on restart |
-| WireGuard interface not up (setup done) | Kernel without WireGuard, or the app not running privileged | Check the logs for `wg-quick` errors. Kernels 5.6+ have WireGuard built in; older ones need the module. IronFlock runs single-container apps privileged by default |
+| WireGuard interface not up (setup done), or the app exits right after start | Kernel without WireGuard, or the app not running privileged | Check the logs for `wg-quick` errors. `RTNETLINK answers: Operation not permitted` means the privileged access was not granted (wg-easy then wrongly blames the kernel): grant it in the app's project settings and restart the app. `Unknown device type` means the kernel lacks WireGuard: kernels 5.6+ have it built in; older ones need the module |
 | ListenPort is not 51820 | An older version seeded the public port as ListenPort | The app repairs the database automatically; restart the app once |
-| IPv4 forwarding = PROBLEM | sysctl could not be set | The container must run privileged; check the logs for the `WARNING: failed to enable net.ipv4.ip_forward` line |
+| IPv4 forwarding = PROBLEM | sysctl could not be set | The container must run privileged: grant the app's privileged access in its project settings; check the logs for the `WARNING: failed to enable net.ipv4.ip_forward` line |
 | Web UI does not answer | wg-easy crashed or is starting | Logs; a restart usually heals it |
 
 ## A client never connects (no handshake)

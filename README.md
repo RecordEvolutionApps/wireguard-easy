@@ -35,6 +35,8 @@ First off, this app is a packaging of the original great work hosted in this Git
 
 An Edge Device running Linux (amd64 or arm64) with a kernel that supports WireGuard (all modern kernels).
 
+The app asks for **privileged access** when you install or update it: grant it, since creating the WireGuard interface and forwarding VPN traffic need network administration rights. Without it wg-easy exits at start with `RTNETLINK answers: Operation not permitted`.
+
 > **Note:** wg-easy v15 no longer supports 32-bit ARM (armv6/armv7).
 
 ## Three places, three jobs
@@ -45,7 +47,7 @@ An Edge Device running Linux (amd64 or arm64) with a kernel that supports WireGu
 | wg-easy Web UI (embedded on the gateway's page of the board) | Clients: create, download configs, enable, expire, delete; interface settings |
 | The board | Status of every gateway and who is connected; per gateway its clients, traffic, setup checks and events, and its **Settings**: the default Allowed IPs for new clients, and **Remove gateway** for a gateway that is gone |
 
-On the board, **Gateways** lists every gateway; a gateway's page shows its state next to the embedded Web UI, with the tabs Clients, Traffic, Checks, Events and Settings. **Clients** lists the clients of all gateways; each client's page shows its state, traffic and events.
+On the board, **Gateways** lists every gateway; a gateway's page shows its state next to the embedded Web UI, with the tabs Clients, Traffic, Checks, Events and Settings. **Client stats** lists the clients of all gateways, read-only; each client's page shows its state, traffic and events and leads to its gateway. Clients are created, changed and deleted only in the gateway's Web UI.
 
 ## First login
 

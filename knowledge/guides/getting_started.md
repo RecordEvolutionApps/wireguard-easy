@@ -83,7 +83,7 @@ the tunnel is ever re-assigned, the board's Events tab says so and the client
 must download its config again.
 
 ## Step 6: verify
-- Board, gateway page, **Clients** tab, or **Clients** in the main menu
+- Board, gateway page, **Clients** tab, or **Client stats** in the main menu
   (all clients of all gateways): the client turns **CONNECTED** within a few
   seconds of activating the tunnel on the device. Its own page shows its
   traffic and events.

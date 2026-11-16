@@ -18,16 +18,17 @@ tables. The AI assistant calls the device functions on one gateway.
 
 | Table | Kind | Written by | Read by |
 |---|---|---|---|
-| `gateways` | entity table, `maintainLatestFlagFor: [device_id]` | each gateway about itself: registration at start (`device_id`, `device_name`, `web_url`, `deleted: false`), then the columns that changed; the board's "Remove gateway" form writes `deleted: true` only | board, `fleet_summary`, AI |
+| `gateway_registry` | entity table, `maintainLatestFlagFor: [device_id]` | each gateway about itself: registration at start (`device_id`, `device_name`, `web_url`, `deleted: false`), then the columns that changed; the board's "Remove gateway" form writes `deleted: true` only | board, `fleet_summary`, AI |
 | `gateway_settings` | entity table, `[device_id]` | the board's settings form | the gateway it names, which applies it |
-| `clients` | entity table, `[client_key]` | the gateway that has the client: first row per run with `deleted: false`, then the changed columns, `deleted: true` once removed in wg-easy; the board's "Remove from list" form writes `deleted: true` only | board, AI |
-| `checks` | entity table, `[device_id, check_id]` | each gateway, when a check's result changes | board, AI |
+| `vpn_clients` | entity table, `[client_key]` | the gateway that has the client: first row per run with `deleted: false`, then the changed columns, `deleted: true` once removed in wg-easy (also when that happened while the app was not running: checked once per run) | board, AI |
+| `gateway_checks` | entity table, `[device_id, check_id]` | each gateway, when a check's result changes | board, AI |
 | `traffic` | readings, 1 min, `dropAfter: 90 days`, downsampled for a year | each gateway, only for clients whose counters moved | board, AI |
 | `events` | events, `dropAfter: 180 days` | each gateway | board, AI |
-| `fleet_summary` | transform over `gateways` (current, undeleted rows) | refreshed by the gateways after their writes, and every minute | the home page's figures |
+| `fleet_summary` | transform over `gateway_registry` (current, undeleted rows) | refreshed by the gateways after their writes, and every minute | the home page's figures |
+| `gateways`, `clients`, `checks` | history of versions before 2026-11-16, keyed by `device_key` | nobody any more | nobody; kept because a table's entity key cannot change (decisions.md) |
 | `error-logs` | the platform's | `report_error` (a settings row a gateway cannot apply) | the board's toast |
 
-One writer per table, with the two delete forms as the documented exception.
+One writer per table, with the board's "Remove gateway" form as the documented exception.
 Every row has a `tsp`. Every column the code writes is declared in
 data-template.yml.
 
@@ -40,15 +41,15 @@ data-template.yml.
    wg-easy's advertised Host/Port, the companion writes it into
    `user_configs_table`, and records an `endpoint_changed` event. It also keeps
    the wg ListenPort at 51820.
-2. **Registration:** once connected, the gateway writes its `gateways` row with
+2. **Registration:** once connected, the gateway writes its `gateway_registry` row with
    `deleted: false` and its Web UI URL from `getRemoteAccessUrlForPort(51821)`
    (a development run gets its own `-dev` tunnel URL from the SDK).
 3. **State** (every 30 s, sooner after a sync event, `register_device.py`):
    `vpn_state.collect()` reads wg-easy's database (read-only), `wg show`, the
    kernel and the local Web UI port, and builds the gateway's state, the client
    list and the setup checklist. The companion writes what changed: a partial
-   `gateways` row, `clients` rows, `checks` rows, a batch of `traffic` rows each
-   minute, and the queued `events`. After a `gateways` write it refreshes
+   `gateway_registry` row, `vpn_clients` rows, `gateway_checks` rows, a batch of `traffic` rows each
+   minute, and the queued `events`. After a `gateway_registry` write it refreshes
    `fleet_summary`.
 4. **Settings:** the gateway subscribes to `gateway_settings` first, then reads
    the newest row for its own `device_id`, and applies a row only when its
@@ -56,12 +57,12 @@ data-template.yml.
    `/data/.ironflock_settings_tsp`, so a restart does not re-apply an old row
    over a later Web UI edit). Applying writes the default Allowed IPs into
    wg-easy's `user_configs_table` (new clients only) and records an
-   `allowed_ips_applied` event; the next `gateways` row shows the new default.
+   `allowed_ips_applied` event; the next `gateway_registry` row shows the new default.
    A row it cannot use (invalid CIDR) is reported with `report_error` and an
    `events` row, and is not retried. A row that arrives before wg-easy's
    first-boot setup has finished waits until it has.
-5. **Removal:** the board's delete forms write `deleted: true`. Every gateway
-   follows `gateways` and refreshes `fleet_summary` when such a row arrives, so
+5. **Removal:** the board's "Remove gateway" form writes `deleted: true`. Every gateway
+   follows `gateway_registry` and refreshes `fleet_summary` when such a row arrives, so
    the home figures drop a removed gateway at once.
 6. **AI tools:** `ai_tools.py` registers the `vpn.*` device functions and the
    knowledge library (`app_knowledge.*`) after the connection is up; the SDK
@@ -74,7 +75,7 @@ data-template.yml.
   Allowed IPs, the VPN subnets. `DISABLE_IPV6` and `INSECURE` apply on every
   start. What users change while the app runs is in `gateway_settings`.
 - Port 51821/http (`WEB_UI_PORT` in `vpn_state.py`): the Web UI, through an
-  HTTPS tunnel; its URL is `gateways.web_url`, embedded on the gateway's page.
+  HTTPS tunnel; its URL is `gateway_registry.web_url`, embedded on the gateway's page.
 - Port 51820/udp (`VPN_PORT`): the VPN. The tunnel assigns a public UDP port,
   forwards it to 51820 in the container and injects the number as `WG_PORT`
   (`remote_port_environment`).
@@ -95,5 +96,9 @@ data-template.yml.
   was written is remembered only after the write succeeded.
 - The first state row waits up to 90 s for wg-easy, so a restart does not
   publish a transient PROBLEM.
+- Without privileged access (declared as `privileged:` in the data template,
+  granted by the user at install or update) the container lacks
+  `CAP_NET_ADMIN`: `wg-quick up` fails with `Operation not permitted` and
+  wg-easy exits, so the app does not run at all.
 - The companion exits on SIGTERM; `entrypoint.sh` restarts it if it dies, and
   ignores SIGHUP for it (see CLAUDE.md).

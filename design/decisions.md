@@ -4,6 +4,57 @@ Newest first. Each entry: the date, what was decided, why, and what was left
 out. Add an entry when a choice between alternatives is made; rewrite the other
 documents to match, and leave the entries themselves as they were written.
 
+## 2026-11-16: No client actions on the board
+
+**Decided:** the board's "Remove from list" on a client page is gone, the
+client page leads to its gateway with a widget-navbutton instead of a
+one-item tab bar, and the menu item reads "Client stats". The gateway closes
+clients that were deleted in wg-easy while the companion was not running: once
+per run it reads the clients `vpn_clients` lists for it and writes
+`deleted: true` / `REMOVED` for those wg-easy no longer has.
+**Why:** clients are created, changed and deleted only in wg-easy. "Remove
+from list" only hid a row on the board, the client kept working and came back
+on the next restart, which read like a delete that did not work. The one real
+gap it covered, a client deleted while the app was down, belongs to the
+gateway, the one writer of the table.
+**Left out:** hiding the clients of a gateway removed on the board. They stay
+listed as last reported; a list without them needs a join with
+`gateway_registry`, i.e. a transform, which would make the client lists follow
+changes only on refresh.
+
+## 2026-11-16: New tables for the re-keyed entities
+
+**Decided:** the entity tables are `gateway_registry` (key `device_id`),
+`vpn_clients` (`client_key`) and `gateway_checks` (`device_id`, `check_id`).
+`gateways`, `clients` and `checks` stay in the data template exactly as
+released before (keyed by `device_key`, gateway name in `devname`), and
+nothing writes or reads them.
+**Why:** the refactor below re-keyed those three tables in place. IronFlock
+refuses to change an existing table's entity key (`maintainLatestFlagFor`),
+so the platform's tables kept the old schema and the board, the gateway
+sidenav first, bound to columns they do not have (`device_id`,
+`device_name`, `deleted`, `client_key`). MTConnectCollector solved the same
+with `gateway_registry` (collector_core 3.0.1). The template validator does
+not catch a key change.
+**Consequence:** the history before the refactor stays in the old tables and
+is not shown on the board. Each gateway registers in `gateway_registry` on
+its first start of this version.
+**Left out:** copying the old rows over; they have no `device_id`, and the
+gateways republish their state within a minute.
+
+## 2026-11-16: Declare privileged access
+
+**Decided:** `.ironflock/data-template.yml` declares `privileged:` with a
+reason. IronFlock now runs a single-image app with Docker's defaults unless it
+declares privileged access, and a development run is privileged only with the
+declaration; the first DEV run without it failed with `RTNETLINK answers:
+Operation not permitted` from `wg-quick up`. wg-easy needs `CAP_NET_ADMIN` for
+the interface, the sysctls and iptables.
+
+**Left out:** a one-service docker-compose.yml with only `cap_add: [NET_ADMIN]`
+would ask for less, but it still needs the same declaration and grant, and a
+Compose app loses `/data`, which the database's persistence depends on.
+
 ## 2026-11-16: Refactor to the IronFlock app guidelines
 
 **Decided**, after a review against the ironflock-templates guidelines:

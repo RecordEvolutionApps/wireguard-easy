@@ -10,7 +10,7 @@
 
 ports:
   # wg-easy admin Web UI. register_device.py publishes its tunnel URL to the
-  # gateways table (web_url) and the board embeds it. The port number is
+  # gateway_registry table (web_url) and the board embeds it. The port number is
   # WEB_UI_PORT in vpn_state.py.
   - name: Web interface
     port: 51821

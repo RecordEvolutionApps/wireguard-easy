@@ -13,8 +13,9 @@
 #   .../checks                the setup checklist with hints
 #   .../events                what the app did and observed
 #   .../settings              default Allowed IPs form, saved settings, "Remove gateway"
-# /client                     Clients: all clients on all gateways
-# /client/<client_key>        Client: state card, its gateway, traffic, events, "Remove from list"
+# /client                     Client stats: all clients on all gateways, read-only (clients
+#                             are created, changed and deleted in the gateway's Web UI)
+# /client/<client_key>        Client: a button to its gateway, state card, traffic, events
 # /guide                      setup, split tunnel, troubleshooting
 # Route segments: gateway and client '2'.
 # States: ok #16a34a, warning #d97706, alarm #dc2626, idle #6b7280, the same on
@@ -31,7 +32,7 @@ widgets:
     style: {fontSize: '$num:16', fontWeight: '$num:400'}
     navItems:
     - {label: '$str:Gateways', iconName: '$str:router', route: '$str:/gateway/'}
-    - {label: '$str:Clients', iconName: '$str:laptop', route: '$str:/client/'}
+    - {label: '$str:Client stats', iconName: '$str:laptop', route: '$str:/client/'}
     - {label: '$str:Guide', iconName: '$str:menu_book', route: '$str:/guide'}
   custom_style: {tile_border_color: transparent}
 - layout_id: errors
@@ -132,7 +133,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: gateways
+          tablename: gateway_registry
           format: {value: device_name}
           queryParams:
             limit: 200
@@ -148,7 +149,7 @@ widgets:
       type: $str:state
       values:
         tableRef:
-          tablename: gateways
+          tablename: gateway_registry
           format: {value: status}
           queryParams:
             limit: 200
@@ -165,7 +166,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: gateways
+          tablename: gateway_registry
           format: {value: status_detail}
           queryParams:
             limit: 200
@@ -179,7 +180,7 @@ widgets:
       type: $str:number
       values:
         tableRef:
-          tablename: gateways
+          tablename: gateway_registry
           format: {value: clients_connected}
           queryParams:
             limit: 200
@@ -194,7 +195,7 @@ widgets:
       type: $str:timestamp
       values:
         tableRef:
-          tablename: gateways
+          tablename: gateway_registry
           format: {value: tsp}
           queryParams:
             limit: 200
@@ -217,7 +218,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: name}
           queryParams:
             limit: 500
@@ -234,7 +235,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: device_name}
           queryParams:
             limit: 500
@@ -249,7 +250,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: ipv4}
           queryParams:
             limit: 500
@@ -265,7 +266,7 @@ widgets:
       type: $str:timestamp
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: last_handshake}
           queryParams:
             limit: 500
@@ -326,7 +327,7 @@ widgets:
     route: $str:/gateway/
     navItems:
       tableRef:
-        tablename: gateways
+        tablename: gateway_registry
         format:
           label: device_name
           iconName: $str:router
@@ -352,7 +353,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: gateways
+          tablename: gateway_registry
           format: {value: device_name}
           queryParams:
             limit: 200
@@ -368,7 +369,7 @@ widgets:
       type: $str:state
       values:
         tableRef:
-          tablename: gateways
+          tablename: gateway_registry
           format: {value: status}
           queryParams:
             limit: 200
@@ -385,7 +386,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: gateways
+          tablename: gateway_registry
           format: {value: status_detail}
           queryParams:
             limit: 200
@@ -399,7 +400,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: gateways
+          tablename: gateway_registry
           format: {value: vpn_endpoint}
           queryParams:
             limit: 200
@@ -413,7 +414,7 @@ widgets:
       type: $str:number
       values:
         tableRef:
-          tablename: gateways
+          tablename: gateway_registry
           format: {value: clients_connected}
           queryParams:
             limit: 200
@@ -428,7 +429,7 @@ widgets:
       type: $str:number
       values:
         tableRef:
-          tablename: gateways
+          tablename: gateway_registry
           format: {value: clients_total}
           queryParams:
             limit: 200
@@ -443,7 +444,7 @@ widgets:
       type: $str:timestamp
       values:
         tableRef:
-          tablename: gateways
+          tablename: gateway_registry
           format: {value: tsp}
           queryParams:
             limit: 200
@@ -475,7 +476,7 @@ widgets:
   chartconfig:
     title:
       valueRef:
-        tablename: gateways
+        tablename: gateway_registry
         column: device_name
         queryParams:
           limit: 1
@@ -508,7 +509,7 @@ widgets:
     - label: $str:name
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: device_name
           queryParams:
             limit: 1
@@ -518,7 +519,7 @@ widgets:
     - label: $str:status
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: status
           queryParams:
             limit: 1
@@ -528,7 +529,7 @@ widgets:
     - label: $str:detail
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: status_detail
           queryParams:
             limit: 1
@@ -538,7 +539,7 @@ widgets:
     - label: $str:endpoint
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: vpn_endpoint
           queryParams:
             limit: 1
@@ -548,7 +549,7 @@ widgets:
     - label: $str:tunnel
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: tunnel_active
           queryParams:
             limit: 1
@@ -558,7 +559,7 @@ widgets:
     - label: $str:iface
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: interface_up
           queryParams:
             limit: 1
@@ -568,7 +569,7 @@ widgets:
     - label: $str:subnet
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: ipv4_cidr
           queryParams:
             limit: 1
@@ -578,7 +579,7 @@ widgets:
     - label: $str:allowed
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: default_allowed_ips
           queryParams:
             limit: 1
@@ -588,7 +589,7 @@ widgets:
     - label: $str:dns
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: default_dns
           queryParams:
             limit: 1
@@ -600,7 +601,7 @@ widgets:
       precision: $num:0
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: clients_connected
           queryParams:
             limit: 1
@@ -612,7 +613,7 @@ widgets:
       precision: $num:0
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: clients_enabled
           queryParams:
             limit: 1
@@ -624,7 +625,7 @@ widgets:
       precision: $num:0
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: clients_total
           queryParams:
             limit: 1
@@ -634,7 +635,7 @@ widgets:
     - label: $str:version
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: wg_easy_version
           queryParams:
             limit: 1
@@ -645,7 +646,7 @@ widgets:
       valueType: $str:timestamp
       value:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: tsp
           queryParams:
             limit: 1
@@ -660,7 +661,7 @@ widgets:
     multiEmbed: $bool:false
     webUrl:
       valueRef:
-        tablename: gateways
+        tablename: gateway_registry
         column: web_url
         queryParams:
           limit: 1
@@ -675,7 +676,7 @@ widgets:
     route: $str:/client/
     navItems:
       tableRef:
-        tablename: clients
+        tablename: vpn_clients
         format:
           label: name
           iconName: $str:laptop
@@ -702,7 +703,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: name}
           queryParams:
             limit: 500
@@ -719,7 +720,7 @@ widgets:
       type: $str:state
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: status}
           queryParams:
             limit: 500
@@ -737,7 +738,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: ipv4}
           queryParams:
             limit: 500
@@ -753,7 +754,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: allowed_ips}
           queryParams:
             limit: 500
@@ -768,7 +769,7 @@ widgets:
       type: $str:timestamp
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: last_handshake}
           queryParams:
             limit: 500
@@ -784,7 +785,7 @@ widgets:
       type: $str:boolean
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: enabled}
           queryParams:
             limit: 500
@@ -800,7 +801,7 @@ widgets:
       type: $str:timestamp
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: expires_at}
           queryParams:
             limit: 500
@@ -865,7 +866,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: checks
+          tablename: gateway_checks
           format: {value: label}
           queryParams:
             limit: 50
@@ -877,7 +878,7 @@ widgets:
       type: $str:state
       values:
         tableRef:
-          tablename: checks
+          tablename: gateway_checks
           format: {value: result}
           queryParams:
             limit: 50
@@ -889,7 +890,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: checks
+          tablename: gateway_checks
           format: {value: message}
           queryParams:
             limit: 50
@@ -900,7 +901,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: checks
+          tablename: gateway_checks
           format: {value: hint}
           queryParams:
             limit: 50
@@ -911,7 +912,7 @@ widgets:
       type: $str:timestamp
       values:
         tableRef:
-          tablename: checks
+          tablename: gateway_checks
           format: {value: tsp}
           queryParams:
             limit: 50
@@ -988,7 +989,7 @@ widgets:
       targetColumn: {tablename: gateway_settings, column: device_id, dataType: numeric}
       preFilledValue:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: device_id
           queryParams:
             limit: 1
@@ -1004,7 +1005,7 @@ widgets:
       targetColumn: {tablename: gateway_settings, column: default_allowed_ips, dataType: string}
       preFilledValue:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: default_allowed_ips
           queryParams:
             limit: 1
@@ -1048,7 +1049,7 @@ widgets:
     markdown: |
       ### Remove this gateway
 
-      Every device that runs the app adds itself to the gateway list. A device cannot tell being offline from being gone, so a gateway that was replaced or scrapped stays listed until you remove it here. Its traffic and events are kept; its clients stay under **Clients**, where you remove each one with **Remove from list**.
+      Every device that runs the app adds itself to the gateway list. A device cannot tell being offline from being gone, so a gateway that was replaced or scrapped stays listed until you remove it here. Its traffic and events are kept, and its clients stay under **Client stats** as offline: clients are deleted only in a gateway's Web UI.
 
       It reappears by itself when it starts the app again.
     data: []
@@ -1067,10 +1068,10 @@ widgets:
     - label: $str:Gateway
       type: $str:numberfield
       hiddenField: $bool:true
-      targetColumn: {tablename: gateways, column: device_id, dataType: numeric}
+      targetColumn: {tablename: gateway_registry, column: device_id, dataType: numeric}
       preFilledValue:
         valueRef:
-          tablename: gateways
+          tablename: gateway_registry
           column: device_id
           queryParams:
             limit: 1
@@ -1081,7 +1082,7 @@ widgets:
       type: $str:checkbox
       hiddenField: $bool:true
       defaultValueBoolean: $bool:true
-      targetColumn: {tablename: gateways, column: deleted, dataType: boolean}
+      targetColumn: {tablename: gateway_registry, column: deleted, dataType: boolean}
   custom_style: {tile_border_color: transparent, tile_background_color: transparent}
 - layout_id: client-list
   package_name: widget-sidenav
@@ -1091,7 +1092,7 @@ widgets:
     route: $str:/client/
     navItems:
       tableRef:
-        tablename: clients
+        tablename: vpn_clients
         format:
           label: display_name
           iconName: $str:laptop
@@ -1110,14 +1111,14 @@ widgets:
   package_name: widget-table
   version: 1.3.3
   chartconfig:
-    title: $str:Clients
-    subTitle: $str:Every VPN client on every gateway. Manage clients in the Web UI on the gateway's page
+    title: $str:Client stats
+    subTitle: $str:Every VPN client on every gateway, read-only. Create, change and delete clients in the Web UI on the gateway's page
     columns:
     - header: $str:Client
       type: $str:string
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: name}
           queryParams:
             limit: 500
@@ -1133,7 +1134,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: device_name}
           queryParams:
             limit: 500
@@ -1147,7 +1148,7 @@ widgets:
       type: $str:state
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: status}
           queryParams:
             limit: 500
@@ -1164,7 +1165,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: ipv4}
           queryParams:
             limit: 500
@@ -1179,7 +1180,7 @@ widgets:
       type: $str:string
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: allowed_ips}
           queryParams:
             limit: 500
@@ -1193,7 +1194,7 @@ widgets:
       type: $str:timestamp
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: last_handshake}
           queryParams:
             limit: 500
@@ -1208,7 +1209,7 @@ widgets:
       type: $str:timestamp
       values:
         tableRef:
-          tablename: clients
+          tablename: vpn_clients
           format: {value: expires_at}
           queryParams:
             limit: 500
@@ -1220,36 +1221,33 @@ widgets:
               - {column: deleted, operator: '=', value: false, dataType: boolean}
       styling: {timestampFormat: '$str:yyyy-MM-dd', width: '$str:110px'}
     styling: {headerFontSize: '$str:14px', cellPaddingVertical: '$str:4px', cellPaddingHorizontal: '$str:8px'}
-- layout_id: client-tabs
-  package_name: widget-navbar
-  version: 1.0.27
+- layout_id: client-gateway
+  package_name: widget-navbutton
+  version: 1.0.20
   chartconfig:
     title:
       valueRef:
-        tablename: clients
-        column: name
+        tablename: vpn_clients
+        column: device_name
         queryParams:
           limit: 1
           filterAnd:
           - {latest: true, column: '', operator: '=', value: '', dataType: boolean}
           - {column: client_key, operator: '=', value: '2', dataType: string, useRoute: true}
-    route: $str:/client/*
-    style: {fontSize: '$num:15', fontWeight: '$num:400'}
-    navItems:
-      tableRef:
-        tablename: clients
-        format:
-          label: device_name
-          iconName: $str:router
-          route: $str:/gateway/{{gateway}}
-          variables:
-          - {label: '$str:gateway', value: device_id}
-        queryParams:
-          limit: 1
-          filterAnd:
-          - {latest: true, column: '', operator: '=', value: '', dataType: boolean}
-          - {column: client_key, operator: '=', value: '2', dataType: string, useRoute: true}
-  custom_style: {tile_border_color: transparent}
+    iconName: $str:router
+    route: $str:/gateway/{{gateway}}
+    variables:
+    - label: $str:gateway
+      value:
+        valueRef:
+          tablename: vpn_clients
+          column: device_id
+          queryParams:
+            limit: 1
+            filterAnd:
+            - {latest: true, column: '', operator: '=', value: '', dataType: boolean}
+            - {column: client_key, operator: '=', value: '2', dataType: string, useRoute: true}
+  custom_style: {tile_border_color: transparent, tile_background_color: transparent}
 - layout_id: client-card
   package_name: widget-markdown
   version: 1.1.1
@@ -1266,7 +1264,7 @@ widgets:
     - label: $str:name
       value:
         valueRef:
-          tablename: clients
+          tablename: vpn_clients
           column: name
           queryParams:
             limit: 1
@@ -1276,7 +1274,7 @@ widgets:
     - label: $str:status
       value:
         valueRef:
-          tablename: clients
+          tablename: vpn_clients
           column: status
           queryParams:
             limit: 1
@@ -1286,7 +1284,7 @@ widgets:
     - label: $str:gateway
       value:
         valueRef:
-          tablename: clients
+          tablename: vpn_clients
           column: device_name
           queryParams:
             limit: 1
@@ -1296,7 +1294,7 @@ widgets:
     - label: $str:ipv4
       value:
         valueRef:
-          tablename: clients
+          tablename: vpn_clients
           column: ipv4
           queryParams:
             limit: 1
@@ -1306,7 +1304,7 @@ widgets:
     - label: $str:allowed
       value:
         valueRef:
-          tablename: clients
+          tablename: vpn_clients
           column: allowed_ips
           queryParams:
             limit: 1
@@ -1316,7 +1314,7 @@ widgets:
     - label: $str:default
       value:
         valueRef:
-          tablename: clients
+          tablename: vpn_clients
           column: uses_default_allowed_ips
           queryParams:
             limit: 1
@@ -1326,7 +1324,7 @@ widgets:
     - label: $str:enabled
       value:
         valueRef:
-          tablename: clients
+          tablename: vpn_clients
           column: enabled
           queryParams:
             limit: 1
@@ -1337,7 +1335,7 @@ widgets:
       valueType: $str:timestamp
       value:
         valueRef:
-          tablename: clients
+          tablename: vpn_clients
           column: last_handshake
           queryParams:
             limit: 1
@@ -1348,7 +1346,7 @@ widgets:
       valueType: $str:timestamp
       value:
         valueRef:
-          tablename: clients
+          tablename: vpn_clients
           column: expires_at
           queryParams:
             limit: 1
@@ -1360,7 +1358,7 @@ widgets:
       precision: $num:0
       value:
         valueRef:
-          tablename: clients
+          tablename: vpn_clients
           column: rx_bytes
           queryParams:
             limit: 1
@@ -1372,7 +1370,7 @@ widgets:
       precision: $num:0
       value:
         valueRef:
-          tablename: clients
+          tablename: vpn_clients
           column: tx_bytes
           queryParams:
             limit: 1
@@ -1383,7 +1381,7 @@ widgets:
       valueType: $str:timestamp
       value:
         valueRef:
-          tablename: clients
+          tablename: vpn_clients
           column: tsp
           queryParams:
             limit: 1
@@ -1391,37 +1389,6 @@ widgets:
             - {latest: true, column: '', operator: '=', value: '', dataType: boolean}
             - {column: client_key, operator: '=', value: '2', dataType: string, useRoute: true}
     verticalScroll: $bool:true
-- layout_id: client-remove
-  package_name: widget-form
-  version: 2.2.0
-  chartconfig:
-    title: $str:Remove this client from the lists?
-    subTitle: $str:For a client whose gateway is gone. To delete a client, use the Web UI on its gateway's page. It reappears when its gateway reports it again.
-    formButton: $bool:true
-    formButtonStyle: {fab: '$bool:false', label: '$str:Remove from list', iconName: '$str:delete', bgColor: '$str:#991b1b', cornerRadius: '$num:4'}
-    accentColor: $str:#991b1b
-    buttonLabels: {submitLabel: '$str:Remove from list', cancelLabel: '$str:Keep'}
-    submitNavigationRoute: $str:/client/
-    formFields:
-    - label: $str:Client
-      type: $str:textfield
-      hiddenField: $bool:true
-      targetColumn: {tablename: clients, column: client_key, dataType: string}
-      preFilledValue:
-        valueRef:
-          tablename: clients
-          column: client_key
-          queryParams:
-            limit: 1
-            filterAnd:
-            - {latest: true, column: '', operator: '=', value: '', dataType: boolean}
-            - {column: client_key, operator: '=', value: '2', dataType: string, useRoute: true}
-    - label: $str:Removed
-      type: $str:checkbox
-      hiddenField: $bool:true
-      defaultValueBoolean: $bool:true
-      targetColumn: {tablename: clients, column: deleted, dataType: boolean}
-  custom_style: {tile_border_color: transparent, tile_background_color: transparent}
 - layout_id: client-traffic
   package_name: widget-linechart
   version: 1.7.15
@@ -1519,7 +1486,7 @@ widgets:
 
       1. Open the gateway under **Gateways**. Its page embeds the admin Web UI; log in with the Admin Username and Admin Password from the app parameters and change the password.
       2. Create a client with **+**, download its config or scan the QR code on the phone, activate the tunnel.
-      3. Watch the client turn **CONNECTED** on the gateway's **Clients** tab, or under **Clients**.
+      3. Watch the client turn **CONNECTED** on the gateway's **Clients** tab, or under **Client stats**.
 
       ## Three places, three jobs
 
@@ -1568,6 +1535,8 @@ widgets:
       ## Requirements
 
       A Linux edge device (amd64 or arm64) with a kernel that supports WireGuard. wg-easy v15 does not support 32-bit ARM.
+
+      Grant the app's **privileged access** when you install or update it: creating the WireGuard interface and forwarding VPN traffic need network administration rights. Without it the app exits at start with `RTNETLINK answers: Operation not permitted`.
     data: []
     verticalScroll: $bool:true
 layout:
@@ -1646,9 +1615,8 @@ layout:
           gridLayout:
           - {id: nav, x: 0, y: 0, w: 96, h: 5, fixedHeight: true}
           - {id: client-list, x: 0, y: 5, w: 16, h: 59, fixedWidth: true}
-          - {id: client-tabs, x: 16, y: 5, w: 80, h: 5, fixedHeight: true}
-          - {id: client-card, x: 16, y: 10, w: 28, h: 49}
-          - {id: client-remove, x: 16, y: 59, w: 28, h: 5}
+          - {id: client-gateway, x: 16, y: 5, w: 24, h: 5, fixedHeight: true}
+          - {id: client-card, x: 16, y: 10, w: 28, h: 54}
           - {id: client-traffic, x: 44, y: 10, w: 52, h: 30}
           - {id: client-events, x: 44, y: 40, w: 52, h: 24}
           - {id: errors, x: 56, y: 52, w: 40, h: 12, z: 1}

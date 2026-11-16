@@ -4,10 +4,10 @@ title: "Reading the board: checklist meanings, client statuses, tables and event
 kind: reference
 summary: >-
   What every setup check means and how to fix it, what the client statuses
-  mean, which tables the board and the AI assistant read (gateways, clients,
-  checks, traffic, events) and the event kinds.
+  mean, which tables the board and the AI assistant read (gateway_registry,
+  vpn_clients, gateway_checks, traffic, events) and the event kinds.
 topic: diagnostics
-keywords: [checks, checklist, status, ok, warning, problem, setup_pending, starting, connected, offline, never_connected, tables, gateways, clients, traffic, events, sql, columns, meaning]
+keywords: [checks, checklist, status, ok, warning, problem, setup_pending, starting, connected, offline, never_connected, tables, gateway_registry, vpn_clients, gateway_checks, gateways, clients, traffic, events, sql, columns, meaning]
 aliases: ["what does this check mean", "status meaning", "table columns", "which tables", "event kinds"]
 verified: verified
 ---
@@ -22,21 +22,28 @@ platform carries the other columns over.
 
 | Table | Key (one entity per) | Written when |
 |---|---|---|
-| `gateways` | `device_id`, the gateway's IronFlock device key | at start (registration, with `device_name`, `web_url`, `deleted` false), then whenever a state value changes (at most every 30 s); the board's "Remove gateway" writes `deleted` true |
+| `gateway_registry` | `device_id`, the gateway's IronFlock device key | at start (registration, with `device_name`, `web_url`, `deleted` false), then whenever a state value changes (at most every 30 s); the board's "Remove gateway" writes `deleted` true |
 | `gateway_settings` | `device_id` | the board's Settings page of the gateway saves the default Allowed IPs |
-| `checks` | `device_id` and `check_id` | a check's result or message changes |
-| `clients` | `client_key`, `"<device_id>-<client_id>"` | a client is created, changed, removed, connects or disconnects; every 10 min while connected; the board's "Remove from list" writes `deleted` true |
+| `gateway_checks` | `device_id` and `check_id` | a check's result or message changes |
+| `vpn_clients` | `client_key`, `"<device_id>-<client_id>"` | a client is created, changed, removed, connects or disconnects; every 10 min while connected; `deleted` true once deleted in the Web UI |
 | `traffic` | readings: client and minute | the client's counters moved during the minute |
 | `events` | readings: one row per event | something happened (append-only) |
 
-`clients` also carries `device_id`, `device_name` (the gateway) and
+The tables `gateways`, `clients` and `checks` hold only the history of app
+versions before 2026-11-16 (keyed by the platform's `device_key`, gateway name
+in `devname`); nothing writes them any more. IronFlock cannot change an
+existing table's entity key, so the current tables have new names.
+
+`vpn_clients` also carries `device_id`, `device_name` (the gateway) and
 `display_name` ("client · gateway"); `traffic` and `events` carry `device_id`,
 `device_name` and, when about a client, `client_key`. Removed gateways and
 clients have `deleted` true: leave them out of every list.
 
-A gateway removed on the board reappears when it starts the app again. A
-client removed from the list on the board (meant for clients of a gateway that
-is gone) reappears when its gateway restarts, if it still exists.
+A gateway removed on the board reappears when it starts the app again.
+Clients are deleted only in the Web UI: their gateway then marks them
+REMOVED, also for a client deleted while the app was not running (checked
+once per start). The clients of a gateway removed on the board stay listed as
+last reported.
 
 The transform `fleet_summary` adds one row of fleet-wide counts over the
 current row of every gateway that is not removed: gateways reporting, OK and
@@ -83,8 +90,6 @@ Each check assumes the ones above it pass; fix top to bottom.
 | EXPIRED | Past its expiry date; cannot connect |
 | REMOVED | Deleted in the Web UI; `deleted` is true and lists hide it |
 
-A client removed from the list on the board keeps its last status and has
-`deleted` true as well.
 
 `rx_bytes` are bytes the gateway received from the client (the client's
 upload), `tx_bytes` bytes sent to the client (its download). Both reset when
@@ -111,14 +116,14 @@ per-minute buckets one year.
 | client_connected / client_disconnected | info | A client's handshake state crossed the 3-minute window |
 
 ## Typical SQL questions (for the AI assistant)
-- Which gateways are not OK: newest row per device_id of `gateways`, then
+- Which gateways are not OK: newest row per device_id of `gateway_registry`, then
   keep those where deleted is not true and status != 'OK'.
 - Which clients on gateway X are connected: newest row per client_key of
-  `clients`, then keep those with device_id = X's device_id, connected, and
+  `vpn_clients`, then keep those with device_id = X's device_id, connected, and
   deleted not true. Filter `deleted` after picking the newest row, or an
   older row of a removed entity comes back.
 - The checklist of gateway X: newest row per (device_id, check_id) of
-  `checks` with device_id = X's device_id.
+  `gateway_checks` with device_id = X's device_id.
 - What default Allowed IPs users saved for gateway X and when: `gateway_settings`
   where device_id = X's device_id, ordered by tsp desc.
 - When did the endpoint last change: `events` where kind = 'endpoint_changed'
