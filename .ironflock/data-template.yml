@@ -1,41 +1,55 @@
 # yaml-language-server: $schema=https://ironflock.com/schemas/data-template/v1.yml
 ############################################################
 # Data template of the WireGuard VPN app (wg-easy on IronFlock)
+# Design: design/entities.md and design/architecture.md (keep them in step).
 #
-# Every table is written by the gateway device about itself, from the
-# companion process register_device.py. The board and the AI assistant read
-# them. The VPN itself (clients, keys, defaults) is configured in the embedded
-# wg-easy Web UI, never through these tables.
+# Each gateway writes its own rows from the companion process
+# (register_device.py). The board writes gateway_settings (what users decide
+# per gateway) and, as the only exception to one writer per table, the
+# deleted flag of a gateway or a client that is gone. Clients, keys and the
+# other VPN settings live in wg-easy and are changed in its Web UI.
 ############################################################
 data:
   description: >-
-    WireGuard VPN gateways (wg-easy) running on edge devices. Each gateway
-    publishes its own current state and setup checklist, the VPN clients it
-    knows with their live connection state, per-minute transfer rates per
-    client, and an event log of what the app did or observed. Direction
-    naming follows the gateway: rx = received from a client, tx = sent to a
-    client.
+    WireGuard VPN gateways (wg-easy) running on edge devices. Entities and their
+    keys: a gateway is the IronFlock device itself (device_id, the device's key);
+    its settings are keyed by device_id; a VPN client is keyed by client_key,
+    "<device_id>-<client_id>", since wg-easy numbers clients per gateway; a
+    check by device_id and check_id. Traffic samples and events carry the
+    device_id and, when about a client, its client_key. Direction naming
+    follows the gateway: rx = received from a client, tx = sent to a client.
   tables:
     - tablename: gateways
       description: >-
-        One row per gateway device: its current state. Written by the gateway
-        itself (register_device.py) whenever something changes, at most every
-        30 s. The newest row per device_key is the gateway's state; use the
-        latest filter. status is OK, WARNING, PROBLEM, SETUP_PENDING or
+        Entity table, one entity per gateway (device_id): its current state.
+        Written by the gateway itself (register_device.py): at start a
+        registration row with device_id, device_name, web_url and deleted =
+        false, then a row with the columns that changed, at most every 30 s.
+        The board's "Remove gateway" form writes deleted = true for a gateway
+        that is gone; nothing removes a gateway automatically, and one that
+        starts the app again reappears. Read it with the latest filter and
+        deleted not true. status is OK, WARNING, PROBLEM, SETUP_PENDING or
         STARTING and summarizes the checks table.
       chunkTimeInterval: 1 month
-      maintainLatestFlagFor: [device_key]
+      maintainLatestFlagFor: [device_id]
       columnstore: false
       columns:
         - id: tsp
           name: Timestamp
           description: When this state was observed.
           dataType: timestamp
-        - id: devname
+        - id: device_id
+          name: Gateway id
+          description: The gateway's IronFlock device key, written by the gateway; the entity key and the route segment of its pages.
+          dataType: numeric
+        - id: device_name
           name: Gateway
-          description: Name of the gateway device in IronFlock.
-          path: kwargs.DEVICE_NAME
+          description: Name of the gateway device in IronFlock, written by the gateway at start.
           dataType: string
+        - id: deleted
+          name: Removed
+          description: True once a user removed the gateway on the board; the gateway's next start writes false again.
+          dataType: boolean
         - id: status
           name: Status
           description: "Overall state: OK (all checks pass), WARNING (something to look at, VPN works), PROBLEM (VPN does not work as it should), SETUP_PENDING (first-boot setup not finished), STARTING (database not created yet)."
@@ -46,7 +60,7 @@ data:
           dataType: string
         - id: web_url
           name: Web UI URL
-          description: HTTPS remote-access URL of the wg-easy admin Web UI (port 51821) through the IronFlock tunnel, in development runs and production installs alike.
+          description: HTTPS remote-access URL of the wg-easy admin Web UI (port 51821), from getRemoteAccessUrlForPort; a development run writes its own -dev tunnel URL.
           dataType: string
         - id: vpn_endpoint
           name: VPN endpoint
@@ -106,7 +120,7 @@ data:
           dataType: numeric
         - id: default_allowed_ips
           name: Default Allowed IPs
-          description: Comma-separated Allowed IPs new clients get (the routes a client sends through the VPN). 0.0.0.0/0 means full tunnel.
+          description: Comma-separated Allowed IPs new clients get (the routes a client sends through the VPN), as in force in wg-easy. 0.0.0.0/0 means full tunnel. Set on the board's gateway settings or in the Web UI.
           dataType: string
         - id: default_dns
           name: Default DNS
@@ -125,33 +139,73 @@ data:
           description: Number of clients with a handshake in the last 3 minutes.
           dataType: numeric
 
+    - tablename: gateway_settings
+      description: >-
+        Entity table, one entity per gateway (device_id): what users decide for
+        the gateway. Written by the board's settings form on the gateway's
+        Settings page. The gateway named by device_id follows the table
+        (subscribe, then the newest row) and applies a row newer than the one
+        it applied last; the result shows in gateways.default_allowed_ips and as
+        an allowed_ips_applied or settings_rejected event.
+      chunkTimeInterval: 1 year
+      maintainLatestFlagFor: [device_id]
+      columnstore: false
+      columns:
+        - id: tsp
+          name: Saved
+          description: When the settings were saved.
+          dataType: timestamp
+        - id: device_id
+          name: Gateway id
+          description: The gateway these settings are for (gateways.device_id).
+          dataType: numeric
+        - id: default_allowed_ips
+          name: Default Allowed IPs
+          description: Comma-separated Allowed IPs that newly created clients get, e.g. "10.8.0.0/24, 192.168.0.10/32" (split tunnel) or "0.0.0.0/0, ::/0" (full tunnel). Existing clients keep their own.
+          dataType: string
+
     - tablename: clients
       description: >-
-        One row per VPN client per gateway, with its configuration from
-        wg-easy and its live connection state. Written by the gateway when a
-        client is created, changed, removed, connects or disconnects, and at
-        least every 10 minutes while connected. Use the latest filter per
-        device_key and client_id; removed clients carry deleted = true.
+        Entity table, one entity per VPN client (client_key,
+        "<device_id>-<client_id>"), with its configuration from wg-easy and its
+        live connection state. Written by the gateway that has the client: the
+        first row per run of the app with deleted = false, then a row with the
+        columns that changed when the client is created, changed, connects or
+        disconnects, and at least every 10 minutes while connected; deleted =
+        true and status REMOVED once it was deleted in the Web UI. The board's
+        "Remove from list" form writes deleted = true for a client whose
+        gateway is gone. Read it with the latest filter and deleted not true.
       chunkTimeInterval: 1 month
-      maintainLatestFlagFor: [device_key, client_id]
+      maintainLatestFlagFor: [client_key]
       columnstore: false
       columns:
         - id: tsp
           name: Timestamp
           description: When this client state was observed.
           dataType: timestamp
-        - id: devname
+        - id: client_key
+          name: Client key
+          description: '"<device_id>-<client_id>": identifies the client across all gateways; the entity key and the route segment of its page.'
+          dataType: string
+        - id: device_id
+          name: Gateway id
+          description: The gateway the client is configured on (gateways.device_id).
+          dataType: numeric
+        - id: device_name
           name: Gateway
-          description: Name of the gateway device in IronFlock.
-          path: kwargs.DEVICE_NAME
+          description: Name of that gateway, written by the gateway.
           dataType: string
         - id: client_id
           name: Client id
-          description: wg-easy's id of the client on this gateway (entity key together with device_key).
+          description: wg-easy's id of the client on its gateway.
           dataType: numeric
         - id: name
           name: Client
           description: Client name as given in the Web UI.
+          dataType: string
+        - id: display_name
+          name: Client and gateway
+          description: '"<name> · <gateway>", the label of the client in lists across gateways.'
           dataType: string
         - id: status
           name: Status
@@ -203,29 +257,28 @@ data:
           dataType: string
         - id: deleted
           name: Removed
-          description: True once the client was removed in the Web UI; filter these out in lists.
+          description: True once the client was deleted in the Web UI, or removed from the lists on the board; filter these out in lists.
           dataType: boolean
 
     - tablename: checks
       description: >-
-        The gateway's setup checklist: one row per check per gateway, written
-        by the gateway when a check's result changes. Checks are ordered as a
-        setup walk-through; each one assumes the ones before it pass. Use the
-        latest filter per device_key and check_id. result is OK, INFO, WARNING
-        or PROBLEM; hint says how to fix it.
+        Entity table, one entity per check per gateway (device_id, check_id):
+        the gateway's setup checklist, written by the gateway when a check's
+        result changes. Checks are ordered as a setup walk-through; each one
+        assumes the ones before it pass. Read it with the latest filter. result
+        is OK, INFO, WARNING or PROBLEM; hint says how to fix it.
       chunkTimeInterval: 1 month
-      maintainLatestFlagFor: [device_key, check_id]
+      maintainLatestFlagFor: [device_id, check_id]
       columnstore: false
       columns:
         - id: tsp
           name: Timestamp
           description: When this result was observed.
           dataType: timestamp
-        - id: devname
-          name: Gateway
-          description: Name of the gateway device in IronFlock.
-          path: kwargs.DEVICE_NAME
-          dataType: string
+        - id: device_id
+          name: Gateway id
+          description: The gateway the check ran on (gateways.device_id).
+          dataType: numeric
         - id: check_id
           name: Check id
           description: "Stable id of the check: db_persisted, database, setup_done, interface_up, listen_port, tunnel_active, endpoint_synced, ip_forward, nat_masquerade, web_ui, default_allowed_ips, clients, expired_clients, never_connected."
@@ -249,11 +302,11 @@ data:
 
     - tablename: traffic
       description: >-
-        Transfer rates per VPN client, sampled by the gateway every minute and
-        written only for clients whose counters moved (idle clients produce no
-        rows). Counters are cumulative since the interface came up and reset
-        on restart; the rates are per sample interval. Charts pivot by
-        client_name.
+        Readings: transfer rates per VPN client, sampled by the gateway every
+        minute and written only for clients whose counters moved (idle clients
+        produce no rows). Counters are cumulative since the interface came up
+        and reset on restart; the rates are per sample interval. Charts pivot
+        by client_name and filter by device_id or client_key.
       chunkTimeInterval: 7 days
       dropAfter: 90 days
       downsample:
@@ -264,10 +317,18 @@ data:
           name: Timestamp
           description: End of the sample interval.
           dataType: timestamp
-        - id: devname
+        - id: device_id
+          name: Gateway id
+          description: The gateway that took the sample (gateways.device_id).
+          dataType: numeric
+        - id: device_name
           name: Gateway
           description: Name of the gateway device in IronFlock.
           path: kwargs.DEVICE_NAME
+          dataType: string
+        - id: client_key
+          name: Client key
+          description: The client (clients.client_key).
           dataType: string
         - id: client_id
           name: Client id
@@ -296,11 +357,12 @@ data:
 
     - tablename: events
       description: >-
-        Log of what the app did and observed on each gateway, appended by the
+        Events: what the app did and observed on each gateway, appended by the
         gateway: companion startup, client Endpoint changes after a tunnel
-        change, Allowed-IPs parameter re-applied, ListenPort repaired, status
-        changes, clients created, removed, connected and disconnected. Read it
-        newest first to explain why something changed.
+        change, default Allowed IPs applied from the board's settings or
+        rejected, ListenPort repaired, status changes, clients created,
+        removed, connected and disconnected. Read it newest first to explain
+        why something changed.
       chunkTimeInterval: 1 month
       dropAfter: 180 days
       columns:
@@ -308,10 +370,18 @@ data:
           name: Timestamp
           description: When the event happened.
           dataType: timestamp
-        - id: devname
+        - id: device_id
+          name: Gateway id
+          description: The gateway the event happened on (gateways.device_id).
+          dataType: numeric
+        - id: device_name
           name: Gateway
           description: Name of the gateway device in IronFlock.
           path: kwargs.DEVICE_NAME
+          dataType: string
+        - id: client_key
+          name: Client key
+          description: The client the event is about (clients.client_key); empty for gateway events.
           dataType: string
         - id: level
           name: Level
@@ -319,7 +389,7 @@ data:
           dataType: string
         - id: kind
           name: Kind
-          description: "Machine-readable kind: startup, endpoint_changed, allowed_ips_applied, listen_port_repaired, status_changed, client_added, client_removed, client_changed, client_connected, client_disconnected."
+          description: "Machine-readable kind: startup, endpoint_changed, allowed_ips_applied, settings_rejected, listen_port_repaired, status_changed, client_added, client_removed, client_changed, client_connected, client_disconnected."
           dataType: string
         - id: message
           name: Message
@@ -333,25 +403,29 @@ data:
   transforms:
     - tablename: fleet_summary
       description: >-
-        One row with fleet-wide counts over the newest row of every gateway:
-        how many gateways report, how many are OK or need attention, and how
-        many clients are connected and enabled across all of them. Feeds the
-        KPI tiles on the board's home page. Recomputed every 10 seconds.
+        One row with fleet-wide counts over the current state of every gateway
+        that is not removed: how many gateways report, how many are OK or need
+        attention, and how many clients are connected and enabled across all of
+        them. Feeds the figures on the board's home page. The gateways refresh
+        it after writing their state and when a gateway is removed; the
+        schedule is a one-minute backstop.
       materialize: false
-      schedule: "*/10 * * * * *"
+      schedule: "0 * * * * *"
       sql: >-
         WITH current AS (
-          SELECT DISTINCT ON (device_key) status, clients_connected, clients_enabled
+          SELECT DISTINCT ON (device_id) status, clients_connected, clients_enabled, deleted
           FROM gateways
-          ORDER BY device_key, tsp DESC
+          WHERE device_id IS NOT NULL
+          ORDER BY device_id, tsp DESC
         )
         SELECT now() AS tsp,
                count(*) AS gateways,
                count(*) FILTER (WHERE status = 'OK') AS gateways_ok,
-               count(*) FILTER (WHERE status <> 'OK') AS gateways_attention,
+               count(*) FILTER (WHERE status IS DISTINCT FROM 'OK') AS gateways_attention,
                coalesce(sum(clients_connected), 0)::bigint AS clients_connected,
                coalesce(sum(clients_enabled), 0)::bigint AS clients_enabled
         FROM current
+        WHERE deleted IS NOT TRUE
       columns:
         - id: tsp
           name: Computed at
@@ -359,7 +433,7 @@ data:
           dataType: timestamp
         - id: gateways
           name: Gateways
-          description: Number of gateways that have reported at least once.
+          description: Number of gateways that have reported and are not removed.
           dataType: bigint
         - id: gateways_ok
           name: Gateways OK

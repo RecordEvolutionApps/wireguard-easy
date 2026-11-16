@@ -52,8 +52,10 @@ entries conflict with the laptop's own network more easily (next section).
    client does not pick it up on its own.
 4. Activate the tunnel and connect to the machine by its **IP address**.
 
-To set the default for every client created from now on, change the app
-parameter **Allowed IPs clients will use**. It affects new clients only.
+To set the default for every client created from now on, open the gateway on
+the board and set **Default Allowed IPs** on its **Settings** page (the app
+parameter **Allowed IPs clients will use** only seeds it on the first start).
+It affects new clients only.
 
 ## Overlapping networks
 If your home or office network uses the same range as the machine network
@@ -101,8 +103,8 @@ that. The AI assistant's route check tells you whether a target is covered by
 the client's Allowed IPs and whether it lies on the gateway's own LAN.
 
 ## Checking a client's routes
-- Board, gateway page, Clients tab: the Allowed IPs column shows what each
-  client routes through the VPN.
+- Board, gateway page, Clients tab, or the client's own page: the Allowed IPs
+  show what each client routes through the VPN.
 - Ask the AI assistant "Will client laptop-marko reach 192.168.0.123 through
   gateway X?". It answers from the client's configuration.
 - On the laptop, `wg show` (or the WireGuard app's details) lists the

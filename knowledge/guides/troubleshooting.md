@@ -114,6 +114,6 @@ The log in IronFlock starts with the `wg-easy startup config` banner
 `PYTHON CHECK`: whether the companion's Python packages import), followed
 by wg-easy's own lines (`Server`, `WireGuard`, `Database`) and the
 companion's lines prefixed `[ironflock]`: `launching companion`, `companion
-starting`, `endpoint sync: ...`, `state: gateway row published`, `event ...`,
+starting`, `endpoint sync: ...`, `registered as gateway ...`, `state: gateway status ...`, `event ...`,
 `ai tools: ...`. If the board shows no gateway, the first `[ironflock]` line
 that is missing tells where the companion stopped. Ask the AI assistant to read the logs for you; it can.

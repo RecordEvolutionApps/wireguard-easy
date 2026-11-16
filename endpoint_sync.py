@@ -1,4 +1,4 @@
-"""Keep wg-easy's database in step with the IronFlock tunnel and the parameters.
+"""Keep wg-easy's database in step with the IronFlock tunnel and the board.
 
 wg-easy applies its INIT_* variables only on the very first boot, but on
 IronFlock two things change afterwards without a container restart:
@@ -9,12 +9,13 @@ IronFlock two things change afterwards without a container restart:
    into user_configs_table.host/port, which wg-easy re-reads on every config
    download and QR code, and enforces interfaces_table.port = 51820, the port
    the tunnel forwards to (effective on the next restart).
-2. The "Allowed IPs clients will use" parameter. `sync_allowed_ips_once`
-   re-applies it to the default for new clients when it differs from the
-   value last applied (state file on /data): last writer wins, so Web UI
-   edits persist until the parameter changes again.
+2. The default Allowed IPs for new clients, which users set on the board
+   (table gateway_settings). `apply_default_allowed_ips` writes it into
+   user_configs_table.default_allowed_ips; the caller decides which settings
+   row is in force (register_device.py).
 
-Both functions are plain, synchronous, and need no platform connection. They
+The functions are plain, synchronous, and need no platform connection
+(settings rows reach the caller only while it is connected, though). They
 return the events they caused as dicts {level, kind, message, detail} so the
 caller can log them to the events table.
 
@@ -23,15 +24,13 @@ busy_timeout=0, so writes here are single short UPDATEs, and nothing is
 written while the first-boot setup runs (general_table.setup_step != 0).
 """
 
+import ipaddress
 import json
 import os
 import sqlite3
 from urllib.parse import urlsplit
 
 from vpn_state import DB_PATH, VPN_PORT, WEB_UI_PORT
-
-ALLOWED_IPS_STATE = "/data/.ironflock_applied_allowed_ips"
-DEV_LABEL_SUFFIX = "-dev"
 
 
 def event(level, kind, message, **detail):
@@ -53,28 +52,10 @@ def get_vpn_endpoint(flock) -> tuple[str, int] | None:
 
 
 def get_web_ui_url(flock) -> str | None:
-    """HTTPS tunnel URL of the wg-easy Web UI, for this run's stage.
-
-    Development runs are tunnelled under the production label with a `-dev`
-    suffix (`4749-wireguard_easy-51821-dev.app.ironflock.com`), but the SDKs
-    (ironflock-py 1.11.0, ironflock-js 1.10.0) compose the label without a
-    stage, so in a DEV container they return the production install's URL.
-    Until they do it themselves, the suffix is added here to the SDK's own
-    URL; the routing is otherwise left to the SDK. A label that already ends
-    in `-dev` is kept, so this becomes a no-op once the SDK is fixed.
-    """
-    url = flock.getRemoteAccessUrlForPort(WEB_UI_PORT)
-    # Same stage rule as the SDK (_stage_from_env): only PROD is production.
-    if not url or os.environ.get("ENV", "").upper() == "PROD":
-        return url
-    parts = urlsplit(url)
-    label, dot, domain = (parts.hostname or "").partition(".")
-    if not dot or label.endswith(DEV_LABEL_SUFFIX):
-        return url
-    label += DEV_LABEL_SUFFIX
-    if len(label) > 63:  # not a valid DNS label: the platform cannot serve it
-        return None
-    return parts._replace(netloc=f"{label}.{domain}").geturl()
+    """HTTPS tunnel URL of the wg-easy Web UI. A development run gets its own
+    tunnel, whose label ends in -dev; the SDK (ironflock 1.11.2 and later)
+    returns that one itself."""
+    return flock.getRemoteAccessUrlForPort(WEB_UI_PORT)
 
 
 def _connect_rw():
@@ -134,49 +115,50 @@ def sync_endpoint_once(endpoint: tuple[str, int] | None) -> list[dict]:
         con.close()
 
 
-def sync_allowed_ips_once() -> tuple[bool, list[dict]]:
-    """Apply a changed INIT_ALLOWED_IPS parameter to the default Allowed IPs.
+def parse_allowed_ips(value) -> list[str]:
+    """Split and validate a comma-separated Allowed IPs value from the board.
 
-    Returns (done, events). `done` is True once handled for this container
-    run (applied, or nothing to do) and False while the DB is not ready.
-    Only the default for NEW clients changes; existing clients keep their own
-    copy (wg-easy copies the default into each client at creation).
+    Raises ValueError naming the first entry that is not an IP network."""
+    entries = [x.strip() for x in str(value or "").split(",") if x.strip()]
+    if not entries:
+        raise ValueError("no Allowed IPs given")
+    for entry in entries:
+        try:
+            ipaddress.ip_network(entry, strict=False)
+        except ValueError:
+            raise ValueError(f"'{entry}' is not an IP address or network in CIDR notation") from None
+    return entries
+
+
+def apply_default_allowed_ips(allowed: list[str]) -> tuple[bool, list[dict]]:
+    """Write the default Allowed IPs for NEW clients into wg-easy.
+
+    Returns (done, events). `done` is False while wg-easy's database is not
+    ready (first boot, setup running); the caller keeps the row and tries
+    again. Existing clients keep their own copy: wg-easy copies the default
+    into each client when it is created.
     """
-    param = os.environ.get("INIT_ALLOWED_IPS", "")
-    wanted = [x.strip() for x in param.split(",") if x.strip()]
-    if not wanted:
-        return True, []
-    try:
-        with open(ALLOWED_IPS_STATE) as f:
-            last_applied = f.read().strip()
-    except OSError:
-        last_applied = None
-    if last_applied == param:
-        return True, []
     if not os.path.exists(DB_PATH):
-        return False, []  # first boot: wg-easy applies INIT_ALLOWED_IPS itself
-    events: list[dict] = []
+        return False, []
     con = _connect_rw()
     try:
         if not _setup_done(con):
             return False, []
-        wanted_json = json.dumps(wanted, separators=(",", ":"))  # stored as a JSON string array
+        wanted_json = json.dumps(allowed, separators=(",", ":"))  # stored as a JSON string array
         cur = con.execute(
             "UPDATE user_configs_table SET default_allowed_ips = ? WHERE default_allowed_ips != ?",
             (wanted_json, wanted_json),
         )
         con.commit()
-        if cur.rowcount:
-            events.append(
-                event(
-                    "info",
-                    "allowed_ips_applied",
-                    f"default Allowed IPs for new clients set to {', '.join(wanted)} from the app parameter",
-                    allowed_ips=wanted,
-                )
-            )
     finally:
         con.close()
-    with open(ALLOWED_IPS_STATE, "w") as f:
-        f.write(param)
-    return True, events
+    if not cur.rowcount:
+        return True, []
+    return True, [
+        event(
+            "info",
+            "allowed_ips_applied",
+            f"default Allowed IPs for new clients set to {', '.join(allowed)} from the board's settings",
+            allowed_ips=allowed,
+        )
+    ]

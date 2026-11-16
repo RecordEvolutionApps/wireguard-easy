@@ -80,6 +80,6 @@ config.
 
 ## Several people, several devices
 Create one client per device, named after person and device
-(`marko-laptop`, `marko-phone`). The Clients tab and the Traffic tab then
+(`marko-laptop`, `marko-phone`). The board's Clients page and the gateway's Traffic tab then
 show who is connected and how much data flows. Disable a client while the
 person is on leave, delete it when they leave.

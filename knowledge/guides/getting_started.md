@@ -23,9 +23,9 @@ confusion:
 
 | Place | What you do there |
 |---|---|
-| App parameters (device or group settings in IronFlock) | First-boot settings: admin login, DNS, default Allowed IPs, VPN subnet |
-| wg-easy Web UI (embedded on the board, or the app icon on the device) | Everything about clients: create, download configs, enable, expire, delete; interface settings |
-| The board (the app's dashboard) | Status of every gateway, the setup checklist, client connection state, traffic, events |
+| App parameters (device or group settings in IronFlock) | First-boot settings: admin login, DNS, first default Allowed IPs, VPN subnet |
+| wg-easy Web UI (embedded on the board's gateway page, or the app icon on the device) | Everything about clients: create, download configs, enable, expire, delete; interface settings |
+| The board (the app's dashboard) | Status of every gateway, the setup checklist, who is connected, traffic, events; per gateway the default Allowed IPs for new clients (Settings) and removing a gateway that is gone |
 
 ## Step 1: install the app on the gateway
 1. In IronFlock, install the app on the device (or device group) that is
@@ -44,9 +44,9 @@ inactive.
 
 ## Step 2: check the board
 Open the app's board. The gateway appears in the table on the home page and in
-the Gateways list. Its status should turn **OK** within a minute. If it shows
-**SETUP_PENDING**, **PROBLEM** or **WARNING**, open the gateway, then the
-**Checks** tab: every check has a message and a hint saying what to do. The
+the **Gateways** list. Its status should turn **OK** within a minute. If it
+shows **SETUP_PENDING**, **PROBLEM** or **WARNING**, open the gateway, then
+its **Checks** tab: every check has a message and a hint saying what to do. The
 checks are ordered as a walk-through; fix the first PROBLEM first.
 
 ## Step 3: log in to the Web UI
@@ -83,8 +83,10 @@ the tunnel is ever re-assigned, the board's Events tab says so and the client
 must download its config again.
 
 ## Step 6: verify
-- Board, gateway page, **Clients** tab: the client turns **CONNECTED** within
-  a few seconds of activating the tunnel on the device.
+- Board, gateway page, **Clients** tab, or **Clients** in the main menu
+  (all clients of all gateways): the client turns **CONNECTED** within a few
+  seconds of activating the tunnel on the device. Its own page shows its
+  traffic and events.
 - From the client, ping the gateway's VPN address (10.8.0.1 by default), then a
   machine's address. If the gateway answers but the machine does not, the
   client's Allowed IPs or the machine's network is the issue: see
@@ -100,4 +102,5 @@ must download its config again.
 | Someone leaves | Disable or delete their client in the Web UI; the change is immediate |
 | A client should reach another machine | Edit its Allowed IPs in the Web UI, then re-download the config on the device |
 | The gateway was re-installed | Clients survive if `/data` persists (checklist: Database persists on /data); otherwise re-create them |
-| The default Allowed IPs should change | Change the parameter; it applies to new clients only |
+| The default Allowed IPs should change | Set it on the gateway's **Settings** page of the board; it applies to new clients only |
+| A gateway is gone for good | **Remove gateway** on its Settings page; it reappears if it ever starts the app again |

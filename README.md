@@ -41,9 +41,11 @@ An Edge Device running Linux (amd64 or arm64) with a kernel that supports WireGu
 
 | Place | What you do there |
 | - | - |
-| App parameters (device or group settings) | First-boot settings: admin login, DNS, default Allowed IPs, VPN subnet |
+| App parameters (device or group settings) | First-boot settings: admin login, DNS, first default Allowed IPs, VPN subnet |
 | wg-easy Web UI (embedded on the gateway's page of the board) | Clients: create, download configs, enable, expire, delete; interface settings |
-| The board | Status of every gateway, setup checklist, client connection state, traffic, events |
+| The board | Status of every gateway and who is connected; per gateway its clients, traffic, setup checks and events, and its **Settings**: the default Allowed IPs for new clients, and **Remove gateway** for a gateway that is gone |
+
+On the board, **Gateways** lists every gateway; a gateway's page shows its state next to the embedded Web UI, with the tabs Clients, Traffic, Checks, Events and Settings. **Clients** lists the clients of all gateways; each client's page shows its state, traffic and events.
 
 ## First login
 
@@ -51,17 +53,17 @@ This app is based on **wg-easy v15**. On the first start the admin account is cr
 
 ## Options
 
-These options can be configured in the parameters of the app. All values below are applied **only on the first start** (while the database is still empty) — change them afterwards directly in the Web UI. Exception: **Allowed IPs clients will use** is re-applied whenever you change the parameter; it then affects newly created clients only (existing clients keep their own value — edit or recreate them in the Web UI).
+These options can be configured in the parameters of the app. All values below except the last two are applied **only on the first start** (while the database is still empty) — change them afterwards in the Web UI. The default **Allowed IPs** for new clients is changed afterwards on the board, on the gateway's **Settings** page; existing clients keep their own value (edit or recreate them in the Web UI).
 
 | Parameter | Default | Description |
 | - | - |  - |
 | Admin Username | `admin` | Initial admin username (min. 2 characters). |
 | Admin Password | `wireguard1234` | Initial admin password (min. 12 characters). Change it after the first login. |
 | DNS Server clients will use | `1.1.1.1` | DNS server(s) handed to clients, comma-separated. |
-| Allowed IPs clients will use | `0.0.0.0/0, ::/0` | Allowed IPs for new clients, comma-separated. |
+| Allowed IPs clients will use | `0.0.0.0/0, ::/0` | First default Allowed IPs for new clients, comma-separated. Later: the gateway's Settings page on the board. |
 | VPN IPv4 subnet | `10.8.0.0/24` | Subnet of the VPN; change it only when your network already uses 10.8.0.x. |
 | VPN IPv6 subnet | `fdcc:ad94:bacf:61a4::cafe:0/112` | IPv6 subnet of the VPN (unused while IPv6 is disabled). |
-| Disable IPv6 | `true` | Disable IPv6 support on the server. |
+| Disable IPv6 | `true` | Disable IPv6 support on the server. Applied on every start. |
 | Allow insecure HTTP access | `false` | Allow login over plain HTTP (LAN access without the tunnel). Applied on every start. |
 
 Other WireGuard settings (MTU, persistent keep-alive, client IP range, and the pre/post-up & down hooks) are no longer environment variables in v15 — they are managed in the Web UI.
@@ -90,7 +92,7 @@ Notes:
 * Prefer narrow `/32` entries: if your home or office network uses the same range as the machine network (e.g. both `192.168.0.x`), a whole-subnet route conflicts with your local network.
 * Connect to the PLC by its **IP address**. TIA Portal's "Accessible devices" scan (PROFINET DCP) uses Layer-2 broadcasts, which do not cross a routed VPN.
 * No changes are needed on the PLC: VPN traffic is masqueraded to the gateway's own LAN address. (If your gateway's LAN interface is not `eth0`, adjust the interface device in the Web UI.)
-* The app parameter *Allowed IPs clients will use* only sets the **default** for newly created clients.
+* The default for newly created clients is set on the gateway's **Settings** page of the board (the parameter *Allowed IPs clients will use* only seeds it on the first start).
 
 ## When something does not work
 

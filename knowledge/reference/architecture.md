@@ -5,8 +5,8 @@ kind: reference
 summary: >-
   The two network paths (HTTPS tunnel for the Web UI, UDP tunnel for the VPN),
   why the client Endpoint is managed by the app, the ListenPort 51820 rule,
-  first-boot-only settings, database persistence and what the companion
-  process does.
+  first-boot-only settings, the board's settings, persistence and what the
+  companion process does.
 topic: architecture
 keywords: [architecture, tunnel, endpoint, listenport, 51820, 51821, udp, https, sync, persistence, data, database, first boot, init, companion, how it works]
 aliases: ["how does it work", "endpoint keeps changing", "why 51820", "host and port overwritten", "internals"]
@@ -17,8 +17,8 @@ verified: verified
 Inside the container two processes run: the unmodified wg-easy server
 (Web UI on port 51821, WireGuard on UDP 51820) and a small companion process
 from IronFlock. The companion never changes how WireGuard works; it only
-keeps a few database values in step with the platform and publishes state
-for the board and the AI assistant.
+keeps a few database values in step with the platform and the board, and
+publishes state for the board and the AI assistant.
 
 ## Two network paths
 ```text
@@ -78,15 +78,24 @@ changed in the Web UI. The app parameters map to them:
 | Admin Username, Admin Password | INIT_USERNAME, INIT_PASSWORD | Change in the Web UI (user menu) |
 | DNS Server clients will use | INIT_DNS | Admin Panel, Interface |
 | VPN IPv4/IPv6 subnet | INIT_IPV4_CIDR, INIT_IPV6_CIDR | Admin Panel, Interface (changes client addresses) |
-| Allowed IPs clients will use | INIT_ALLOWED_IPS | Re-applied by the app when the parameter changes; see below |
+| Allowed IPs clients will use | INIT_ALLOWED_IPS | Board: the gateway's Settings page; see below |
 | Disable IPv6, Allow insecure HTTP | DISABLE_IPV6, INSECURE | Runtime settings, applied on every start |
 
-**Allowed IPs is the one managed exception.** When the parameter differs from
-the value last applied (recorded in `/data`), the companion writes it into
-the default Allowed IPs for new clients and logs `allowed_ips_applied`. Last
-writer wins: a Web UI edit of the default persists until the parameter is
-changed again. Existing clients are never touched; wg-easy copies the default
-into each client when it is created.
+**The default Allowed IPs is set on the board.** After the first start,
+users change the default Allowed IPs for new clients on the gateway's
+**Settings** page of the board, which saves a row in the table
+`gateway_settings` for that gateway. The companion follows the table: it
+subscribes, reads the newest row for its own gateway at start, and applies a
+row only when it is newer than the one it applied last (recorded in `/data`).
+Applying writes the value into wg-easy's default Allowed IPs and logs
+`allowed_ips_applied`; a row saved while setup is still running waits until
+it has finished. A value that is not a list of IP addresses or CIDR networks
+is rejected (`settings_rejected` event and a message on the board) and not
+retried. Last writer wins: a Web UI edit of the default persists until the
+next save on the board, and a restart does not re-apply an older board value.
+Existing clients are never touched; wg-easy copies the default into each
+client when it is created. The `INIT_ALLOWED_IPS` parameter only seeds the
+default on the first start.
 
 ## Persistence
 wg-easy keeps everything, clients and keys included, in one SQLite file at
@@ -111,10 +120,14 @@ container lifetime and:
 
 1. run the endpoint sync described above, independently of the platform
    connection, so a gateway in a restrictive network keeps a correct endpoint;
-2. every 30 s collect the gateway's state from the database, `wg show`, the
-   kernel and the local Web UI port, and write changes to the tables
+2. register the gateway at start in the table `gateways` (its device key as
+   `device_id`, its name and its Web UI URL), which also brings back a
+   gateway that was removed on the board;
+3. apply the default Allowed IPs saved on the board, as described above;
+4. every 30 s collect the gateway's state from the database, `wg show`, the
+   kernel and the local Web UI port, and write what changed to the tables
    `gateways`, `clients`, `checks`, `events`, plus `traffic` every minute;
-3. register the AI assistant's tools on the device: status, clients,
+5. register the AI assistant's tools on the device: status, clients,
    diagnose, route check, endpoint re-sync and this knowledge library.
 
 The container logs start with a `wg-easy startup config` banner that shows

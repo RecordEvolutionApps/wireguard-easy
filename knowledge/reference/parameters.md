@@ -5,7 +5,7 @@ kind: reference
 summary: >-
   Every parameter of the app (admin login, DNS, Allowed IPs, VPN subnets,
   IPv6, insecure HTTP): its default, when it is applied, and where to change
-  the setting later in the Web UI.
+  the setting later: the Web UI, or the board for the default Allowed IPs.
 topic: parameters
 keywords: [parameters, settings, environment, init, username, password, dns, allowed ips, subnet, cidr, ipv6, insecure, http, defaults, first start, change later]
 aliases: ["app settings", "environment variables", "how to change the password", "change dns", "change subnet"]
@@ -17,6 +17,9 @@ Parameters are set per device or device group in the app's settings in
 IronFlock. They reach the container as environment variables. wg-easy reads
 most of them only on the **first start**, while its database is still empty.
 Afterwards the setting lives in the database and is changed in the Web UI.
+The one setting the board manages is the default Allowed IPs for new clients:
+after the first start it is set on the gateway's **Settings** page of the
+board, not with the parameter.
 
 ## The parameters
 | Parameter | Variable | Default | Applied | Change later in |
@@ -24,7 +27,7 @@ Afterwards the setting lives in the database and is changed in the Web UI.
 | Admin Username | INIT_USERNAME | `admin` | First start | Web UI, user menu (min. 2 characters) |
 | Admin Password | INIT_PASSWORD | `wireguard1234` | First start | Web UI, user menu. Min. 12 characters, or the account is not created |
 | DNS Server clients will use | INIT_DNS | `1.1.1.1` | First start | Admin Panel, Interface (default DNS); per client in the client's settings |
-| Allowed IPs clients will use | INIT_ALLOWED_IPS | `0.0.0.0/0, ::/0` | First start **and whenever the parameter changes** (new clients only) | Admin Panel, Interface (default Allowed IPs); per client in the client's settings |
+| Allowed IPs clients will use | INIT_ALLOWED_IPS | `0.0.0.0/0, ::/0` | First start | Board: the gateway's Settings page (default for new clients), or Admin Panel, Interface; per client in the client's settings |
 | VPN IPv4 subnet | INIT_IPV4_CIDR | `10.8.0.0/24` | First start, only together with the IPv6 subnet | Admin Panel, Interface (clients get new addresses) |
 | VPN IPv6 subnet | INIT_IPV6_CIDR | `fdcc:ad94:bacf:61a4::cafe:0/112` | First start, with the IPv4 subnet | Admin Panel, Interface |
 | Disable IPv6 | DISABLE_IPV6 | `true` | Every start | The parameter |
@@ -47,11 +50,17 @@ DNS makes machine names resolvable. Changing the default later affects new
 clients; existing clients keep their own DNS unless edited.
 
 **Allowed IPs clients will use.** The destinations a client sends through the
-VPN; see `guide.split_tunnel`. The app re-applies this parameter when it
-changes, so it works as the fleet-wide default for new clients without
-touching the Web UI. Existing clients keep their own copy; edit or recreate
-them, then re-download their configs. Last writer wins between the parameter
-and a Web UI edit of the default.
+VPN; see `guide.split_tunnel`. The parameter seeds the default on the first
+start only; changing it later has no effect. Afterwards set the default per
+gateway on the board: the gateway's **Settings** page
+(`/gateway/<device_id>/settings`, table `gateway_settings`). The gateway
+applies a saved value within seconds, also when it was offline at the time,
+and records `allowed_ips_applied` in its events. A value that is not a list
+of IP addresses or CIDR networks is rejected: the event `settings_rejected`
+and a message on the board say why, and the default stays as it was. Last
+writer wins between the board and a Web UI edit of the default; a restart
+does not re-apply an older board value. Existing clients keep their own copy;
+edit or recreate them, then re-download their configs.
 
 **VPN IPv4 / IPv6 subnet.** wg-easy requires both to be set together on the
 first start. Change the IPv4 subnet only when the plant or office network

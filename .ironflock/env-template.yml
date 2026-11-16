@@ -10,9 +10,10 @@
 # wizard is skipped and you can log straight into the Web UI.
 #
 # IMPORTANT: wg-easy applies INIT_* values only on the very first start;
-# changing them later has no effect — adjust those settings afterwards in the
-# Web UI. Exception: INIT_ALLOWED_IPS is re-applied by the app whenever the
-# parameter changes (affects newly created clients only).
+# changing them later has no effect. Afterwards the Web UI holds them, and the
+# default Allowed IPs for new clients is set per gateway on the board (its
+# Settings page, table gateway_settings): it changes while the app runs, so it
+# is board-written state, not a parameter. See design/decisions.md.
 #
 # The VPN host/port (INIT_HOST / INIT_PORT) and INIT_ENABLED are derived from
 # the device and set in entrypoint.sh; the client Endpoint then follows the
@@ -43,7 +44,7 @@ INIT_ALLOWED_IPS:
     label: Allowed IPs clients will use
     type: text
     defaultValue: 0.0.0.0/0, ::/0
-    description: Comma-separated Allowed IPs for clients. Applied on the first start and re-applied whenever you change this parameter — changes affect NEWLY created clients only; existing clients keep their own Allowed IPs (edit or recreate them in the Web UI, then re-download their configs). Keep the default for a full tunnel (ALL laptop traffic goes through the gateway). For a split tunnel — reach machines behind the gateway while browsing the internet normally — set "10.8.0.0/24, <machine subnet>", e.g. "10.8.0.0/24, 192.168.0.0/24".
+    description: Comma-separated Allowed IPs that new clients get, applied on the first start only. Afterwards change the default on the board (the gateway's Settings page), which affects newly created clients only. Keep the default for a full tunnel (ALL laptop traffic goes through the gateway). For a split tunnel, reach machines behind the gateway while browsing the internet normally, set "10.8.0.0/24, <machine subnet>", e.g. "10.8.0.0/24, 192.168.0.0/24".
 
 INIT_IPV4_CIDR:
     label: VPN IPv4 subnet

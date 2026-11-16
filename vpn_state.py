@@ -240,7 +240,6 @@ def build_clients(db: dict | None, dump: dict | None, now: float | None = None) 
                 "rx_bytes": int(peer.get("rx_bytes", 0)),
                 "tx_bytes": int(peer.get("tx_bytes", 0)),
                 "public_key": c["public_key"],
-                "deleted": False,
             }
         )
     return rows
@@ -388,7 +387,7 @@ def collect(endpoint: tuple[str, int] | None) -> dict:
             "Default Allowed IPs for new clients",
             OK if routes_vpn else WARNING,
             ", ".join(default_allowed) or "(empty)",
-            None if routes_vpn else f"New clients would not route the VPN subnet {vpn_cidr}. Add it to the 'Allowed IPs clients will use' parameter (full tunnel: 0.0.0.0/0, ::/0).",
+            None if routes_vpn else f"New clients would not route the VPN subnet {vpn_cidr}. Add it to the default Allowed IPs on the gateway's Settings page of the board (full tunnel: 0.0.0.0/0, ::/0).",
         )
 
     clients = build_clients(db, dump, now)
